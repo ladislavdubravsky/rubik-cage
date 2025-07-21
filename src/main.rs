@@ -1,3 +1,10 @@
+mod cage;
+mod cubie;
+
+use cage::Cage;
+use std::str::FromStr;
+
 fn main() {
-    println!("Hello, world!");
+    let cage = Cage::from_str("R........,GB.......,YOW.....B").unwrap();
+    cage.draw();
 }
