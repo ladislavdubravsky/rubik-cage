@@ -1,8 +1,9 @@
 use crate::cubie::Cubie;
 use std::str::FromStr;
 
+#[derive(Debug, PartialEq)]
 pub struct Cage {
-    grid: [[[Option<Cubie>; 3]; 3]; 3],
+    pub grid: [[[Option<Cubie>; 3]; 3]; 3],
 }
 
 impl Cage {

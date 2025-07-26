@@ -1,5 +1,6 @@
 mod cage;
 mod cubie;
+mod r#move;
 
 use cage::Cage;
 use std::str::FromStr;
