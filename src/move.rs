@@ -99,7 +99,6 @@ impl Cage {
         Ok(())
     }
 
-    
     pub fn flip(&mut self) {
         let mut new_grid = [[[None; 3]; 3]; 3];
 
@@ -122,12 +121,8 @@ impl Cage {
 
     pub fn apply_move(&mut self, m: Move) -> Result<(), &'static str> {
         match m {
-            Move::Drop { color, column } => {
-                self.drop(color, column)
-            }
-            Move::RotateLayer { layer, rotation } => {
-                self.rotate_layer(layer, rotation)
-            }
+            Move::Drop { color, column } => self.drop(color, column),
+            Move::RotateLayer { layer, rotation } => self.rotate_layer(layer, rotation),
             Move::Flip => {
                 self.flip();
                 Ok(())
@@ -138,8 +133,8 @@ impl Cage {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn test_drop_cubie_basic() {
@@ -174,7 +169,7 @@ mod tests {
         let mut cage = Cage::from_str("R........,GB.......,YWO......").unwrap();
         cage.draw();
         cage.flip();
-        
+
         let expected = Cage::from_str("......Y..,......GW.,......RBO").unwrap();
         assert_eq!(cage, expected);
 

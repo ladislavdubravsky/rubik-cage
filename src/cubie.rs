@@ -1,6 +1,6 @@
 use owo_colors::OwoColorize;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Cubie {
     White,
     Yellow,
