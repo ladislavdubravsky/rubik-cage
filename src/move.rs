@@ -163,8 +163,22 @@ mod tests {
     fn test_rotate_layer() {
         let mut cage = Cage::from_str("O........,W........,Y........").unwrap();
         assert!(cage.rotate_layer(Layer::Down, Rotation::Clockwise).is_ok());
+
         let expected = Cage::from_str(".........,O........,W.Y......").unwrap();
         assert_eq!(cage, expected);
+        cage.draw();
+    }
+
+    #[test]
+    fn test_flip() {
+        let mut cage = Cage::from_str("R........,GB.......,YWO......").unwrap();
+        cage.draw();
+        cage.flip();
+        
+        let expected = Cage::from_str("......Y..,......GW.,......RBO").unwrap();
+        assert_eq!(cage, expected);
+
+        println!("After flip:");
         cage.draw();
     }
 }
