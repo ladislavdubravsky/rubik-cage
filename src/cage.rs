@@ -35,14 +35,13 @@ impl Cage {
     /// Checks if there are 3 same color cubies in a row, column, or diagonal. Center column is not
     /// available!
     pub fn has_line(&self) -> bool {
-        // TODO: call once only
         let slot_to_lines = slot_to_lines();
         // TODO: use incrementally
         let mut counts: HashMap<(Line, Cubie), u8> = HashMap::new();
 
         for (slot, lines) in slot_to_lines {
             if let Some(cubie) = self.grid[slot[0]][slot[1]][slot[2]] {
-                for line in lines {
+                for &line in lines {
                     *counts.entry((line, cubie)).or_insert(0) += 1;
                 }
             }

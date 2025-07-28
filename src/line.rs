@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::OnceLock};
 
 pub type Slot = [usize; 3];
 pub type Line = [Slot; 3];
@@ -38,16 +38,20 @@ pub const LINES: [Line; 28] = [
     [[2, 2, 0], [1, 2, 1], [0, 2, 2]],
 ];
 
-pub fn slot_to_lines() -> HashMap<Slot, Vec<Line>> {
-    let mut slot_to_lines: HashMap<Slot, Vec<Line>> = HashMap::new();
+pub static SLOT_TO_LINES: OnceLock<HashMap<Slot, Vec<Line>>> = OnceLock::new();
 
-    for line in LINES.iter() {
-        for &slot in line {
-            slot_to_lines.entry(slot).or_default().push(*line);
+pub fn slot_to_lines() -> &'static HashMap<Slot, Vec<Line>> {
+    SLOT_TO_LINES.get_or_init(|| {
+        let mut slot_to_lines: HashMap<Slot, Vec<Line>> = HashMap::new();
+
+        for line in LINES.iter() {
+            for &slot in line {
+                slot_to_lines.entry(slot).or_default().push(*line);
+            }
         }
-    }
 
-    slot_to_lines
+        slot_to_lines
+    })
 }
 
 #[cfg(test)]
