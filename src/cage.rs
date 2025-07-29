@@ -34,7 +34,7 @@ impl Cage {
 
     /// Checks if there are 3 same color cubies in a row, column, or diagonal. Center column is not
     /// available!
-    pub fn has_line(&self) -> bool {
+    pub fn has_line(&self) -> Option<Cubie> {
         let slot_to_lines = slot_to_lines();
         // TODO: use incrementally
         let mut counts: HashMap<(Line, Cubie), u8> = HashMap::new();
@@ -43,11 +43,14 @@ impl Cage {
             if let Some(cubie) = self.grid[slot[0]][slot[1]][slot[2]] {
                 for &line in lines {
                     *counts.entry((line, cubie)).or_insert(0) += 1;
+                    if counts[&(line, cubie)] == 3 {
+                        return Some(cubie); // Found a line with 3 same color cubies
+                    }
                 }
             }
         }
 
-        counts.values().any(|&count| count == 3)
+        None // No lines found
     }
 }
 
@@ -100,15 +103,15 @@ mod tests {
     #[rustfmt::skip]
     #[test]
     fn test_line_detection() {
-        assert!(Cage::from_str("R........,R........,R........").unwrap().has_line());
-        assert!(Cage::from_str(".........,....Y....,......BBB").unwrap().has_line());
-        assert!(Cage::from_str(".O......O,W.GWG.W..,R..Y....Y").unwrap().has_line());
-        assert!(Cage::from_str("R........,...R.....,......R..").unwrap().has_line());
-        assert!(Cage::from_str("..O......,.....O...,........O").unwrap().has_line());
-        assert!(!Cage::from_str("R........,O........,R........").unwrap().has_line());
+        assert!(Cage::from_str("R........,R........,R........").unwrap().has_line().is_some());
+        assert!(Cage::from_str(".........,....Y....,......BBB").unwrap().has_line().is_some());
+        assert!(Cage::from_str(".O......O,W.GWG.W..,R..Y....Y").unwrap().has_line().is_some());
+        assert!(Cage::from_str("R........,...R.....,......R..").unwrap().has_line().is_some());
+        assert!(Cage::from_str("..O......,.....O...,........O").unwrap().has_line().is_some());
+        assert!(Cage::from_str("R........,O........,R........").unwrap().has_line().is_none());
 
         let cage_full = Cage::from_str("WYRBOGGOB,OGBYRYWBG,ROWBYGOWB").unwrap();
-        assert!(!cage_full.has_line());
+        assert!(cage_full.has_line().is_none());
         cage_full.draw();
     }
 }
