@@ -1,5 +1,6 @@
 mod cage;
 mod cubie;
+mod game;
 mod line;
 mod r#move;
 

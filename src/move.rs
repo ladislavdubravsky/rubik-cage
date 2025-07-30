@@ -1,18 +1,21 @@
 #![allow(dead_code)]
 use crate::{cage::Cage, cubie::Cubie};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Rotation {
     Clockwise,
     CounterClockwise,
     HalfTurn,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Layer {
     Down,
     Equator,
     Up,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Move {
     Drop {
         color: Cubie,
@@ -23,6 +26,23 @@ pub enum Move {
         rotation: Rotation,
     },
     Flip,
+}
+
+impl Move {
+    pub fn inverse(self) -> Option<Self> {
+        match self {
+            Move::Drop { .. } => None, // Dropping a cubie cannot be inverted
+            Move::RotateLayer { layer, rotation } => {
+                let inverse_rotation = match rotation {
+                    Rotation::Clockwise => Rotation::CounterClockwise,
+                    Rotation::CounterClockwise => Rotation::Clockwise,
+                    Rotation::HalfTurn => Rotation::HalfTurn,
+                };
+                Some(Move::RotateLayer { layer, rotation: inverse_rotation })
+            }
+            Move::Flip => Some(Move::Flip),
+        }
+    }
 }
 
 impl Cage {
