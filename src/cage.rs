@@ -4,7 +4,7 @@ use crate::{
 };
 use std::{collections::HashMap, str::FromStr};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub struct Cage {
     pub grid: [[[Option<Cubie>; 3]; 3]; 3],
 }

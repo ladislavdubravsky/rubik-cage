@@ -1,21 +1,21 @@
 #![allow(dead_code)]
 use crate::{cage::Cage, cubie::Cubie};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Rotation {
     Clockwise,
     CounterClockwise,
     HalfTurn,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Layer {
     Down,
     Equator,
     Up,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Move {
     Drop {
         color: Cubie,
@@ -38,7 +38,10 @@ impl Move {
                     Rotation::CounterClockwise => Rotation::Clockwise,
                     Rotation::HalfTurn => Rotation::HalfTurn,
                 };
-                Some(Move::RotateLayer { layer, rotation: inverse_rotation })
+                Some(Move::RotateLayer {
+                    layer,
+                    rotation: inverse_rotation,
+                })
             }
             Move::Flip => Some(Move::Flip),
         }
@@ -86,7 +89,7 @@ impl Cage {
         }
     }
 
-    pub fn rotate_layer(&mut self, layer: Layer, rotation: Rotation) -> Result<(), &'static str> {
+    pub fn rotate_layer(&mut self, layer: Layer, rotation: Rotation) {
         let z = match layer {
             Layer::Down => 0,
             Layer::Equator => 1,
@@ -115,8 +118,6 @@ impl Cage {
 
         // Apply gravity after rotation
         self.apply_gravity();
-
-        Ok(())
     }
 
     pub fn flip(&mut self) {
@@ -137,17 +138,6 @@ impl Cage {
 
         self.grid = new_grid;
         self.apply_gravity();
-    }
-
-    pub fn apply_move(&mut self, m: Move) -> Result<(), &'static str> {
-        match m {
-            Move::Drop { color, column } => self.drop(color, column),
-            Move::RotateLayer { layer, rotation } => self.rotate_layer(layer, rotation),
-            Move::Flip => {
-                self.flip();
-                Ok(())
-            }
-        }
     }
 }
 
@@ -177,7 +167,7 @@ mod tests {
     #[test]
     fn test_rotate_layer() {
         let mut cage = Cage::from_str("O........,W........,Y........").unwrap();
-        assert!(cage.rotate_layer(Layer::Down, Rotation::Clockwise).is_ok());
+        cage.rotate_layer(Layer::Down, Rotation::Clockwise);
 
         let expected = Cage::from_str(".........,O........,W.Y......").unwrap();
         assert_eq!(cage, expected);
