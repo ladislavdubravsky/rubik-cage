@@ -11,21 +11,16 @@ pub struct Player {
 }
 
 // TODO: enable more than 2 players and more than 1 color per player
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct GameState {
     pub cage: Cage,
     pub players: [Player; 2],
     pub remaining_cubies: [u8; 2],
     pub player_to_move: Player,
-    pub last_move: Option<Move>,
 }
 
 impl GameState {
-    pub fn new(players: u8, cubies: u8) -> Self {
-        if players != 2 {
-            panic!("Only 2 players supported for now");
-        }
-
+    pub fn new(p1_cubies: u8, p2_cubies: u8) -> Self {
         let players = [
             Player {
                 color: Cubie::Blue,
@@ -40,9 +35,8 @@ impl GameState {
         Self {
             cage: Cage::new(),
             players,
-            remaining_cubies: [cubies; 2],
+            remaining_cubies: [p1_cubies, p2_cubies],
             player_to_move: players[0],
-            last_move: None,
         }
     }
 
@@ -67,12 +61,11 @@ impl GameState {
             }
         }
 
-        // Flip: allowed if not inverting the previous move
-        if self.last_move != Some(Move::Flip) {
-            moves.push(Move::Flip);
-        }
+        // TODO: Figure out if we need to be preventing previous move inversions (orig. game rule)
+        // Flip
+        moves.push(Move::Flip);
 
-        // Rotations: allowed if not inverting the previous move
+        // Rotations
         for layer in [Layer::Down, Layer::Equator, Layer::Up] {
             for rotation in [
                 Rotation::Clockwise,
@@ -80,9 +73,7 @@ impl GameState {
                 Rotation::HalfTurn,
             ] {
                 let r#move = Move::RotateLayer { layer, rotation };
-                if self.last_move != r#move.inverse() {
-                    moves.push(r#move);
-                }
+                moves.push(r#move);
             }
         }
 
@@ -103,7 +94,6 @@ impl GameState {
             }
         }
 
-        self.last_move = Some(r#move);
         self.player_to_move = if self.player_to_move.id == 0 {
             self.players[1]
         } else {
@@ -120,14 +110,14 @@ mod tests {
 
     #[test]
     fn test_legal_moves_initial_state() {
-        let game = GameState::new(2, 4);
+        let game = GameState::new(4, 4);
         let legal_moves = game.legal_moves();
         assert!(legal_moves.len() == 18);
     }
 
     #[test]
     fn test_full_column_drop_illegal() {
-        let mut game = GameState::new(2, 4);
+        let mut game = GameState::new(4, 4);
         for _ in 0..3 {
             game.cage.drop(game.player_to_move.color, (0, 0)).unwrap();
         }
@@ -142,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_out_of_turn_drop_illegal() {
-        let mut game = GameState::new(2, 4);
+        let mut game = GameState::new(4, 4);
         game.apply_move(Move::Drop {
             color: game.players[0].color,
             column: (1, 2),
@@ -163,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_inverting_moves_illegal() {
-        let mut game = GameState::new(2, 4);
+        let mut game = GameState::new(4, 4);
         game.apply_move(Move::Flip).unwrap();
         assert!(!game.legal_moves().contains(&Move::Flip));
 
@@ -180,7 +170,7 @@ mod tests {
 
     #[test]
     fn test_no_drops_after_cubies_spent() {
-        let mut game = GameState::new(2, 1);
+        let mut game = GameState::new(1, 1);
         game.apply_move(Move::Drop {
             color: game.player_to_move.color,
             column: (0, 0),

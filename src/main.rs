@@ -3,6 +3,7 @@ mod cubie;
 mod game;
 mod line;
 mod r#move;
+mod search;
 
 use cage::Cage;
 use std::str::FromStr;
