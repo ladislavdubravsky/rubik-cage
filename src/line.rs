@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::OnceLock};
+use std::{collections::HashMap, sync::LazyLock};
 
 pub type Slot = [usize; 3];
 pub type Line = [Slot; 3];
@@ -38,21 +38,17 @@ pub const LINES: [Line; 28] = [
     [[2, 2, 0], [1, 2, 1], [0, 2, 2]],
 ];
 
-pub static SLOT_TO_LINES: OnceLock<HashMap<Slot, Vec<Line>>> = OnceLock::new();
+pub static SLOT_TO_LINES: LazyLock<HashMap<Slot, Vec<Line>>> = LazyLock::new(|| {
+    let mut slot_to_lines: HashMap<Slot, Vec<Line>> = HashMap::new();
 
-pub fn slot_to_lines() -> &'static HashMap<Slot, Vec<Line>> {
-    SLOT_TO_LINES.get_or_init(|| {
-        let mut slot_to_lines: HashMap<Slot, Vec<Line>> = HashMap::new();
-
-        for line in LINES.iter() {
-            for &slot in line {
-                slot_to_lines.entry(slot).or_default().push(*line);
-            }
+    for line in LINES.iter() {
+        for &slot in line {
+            slot_to_lines.entry(slot).or_default().push(*line);
         }
+    }
 
-        slot_to_lines
-    })
-}
+    slot_to_lines
+});
 
 #[cfg(test)]
 mod tests {
@@ -75,8 +71,7 @@ mod tests {
 
     #[test]
     fn test_slot_to_lines() {
-        let slot_to_lines = slot_to_lines();
-        let lines_from_0 = slot_to_lines.get(&[0, 0, 0]).unwrap();
+        let lines_from_0 = SLOT_TO_LINES.get(&[0, 0, 0]).unwrap();
         assert_eq!(
             lines_from_0,
             &vec![
