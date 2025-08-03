@@ -1,7 +1,7 @@
 use crate::game::GameState;
 use std::collections::{HashMap, HashSet};
 
-pub fn evaluate(game_state: &GameState) -> HashMap<GameState, isize> {
+pub fn evaluate(game_state: &GameState) -> HashMap<u64, isize> {
     let mut visited = HashSet::new();
     let mut evaluated = HashMap::new();
     minimax(game_state, &mut visited, &mut evaluated);
@@ -10,14 +10,14 @@ pub fn evaluate(game_state: &GameState) -> HashMap<GameState, isize> {
 
 pub fn minimax(
     game_state: &GameState,
-    visited: &mut HashSet<GameState>,
-    evaluated: &mut HashMap<GameState, isize>,
+    visited: &mut HashSet<u64>,
+    evaluated: &mut HashMap<u64, isize>,
 ) -> isize {
-    if let Some(&score) = evaluated.get(game_state) {
+    if let Some(&score) = evaluated.get(&game_state.zobrist_hash) {
         return score;
     }
 
-    visited.insert(game_state.clone());
+    visited.insert(game_state.zobrist_hash);
 
     if let Some(color) = game_state.cage.has_line() {
         let score = if color == game_state.players[0].color {
@@ -25,8 +25,8 @@ pub fn minimax(
         } else {
             -1 // Second player win
         };
-        visited.remove(game_state);
-        evaluated.insert(game_state.clone(), score);
+        visited.remove(&game_state.zobrist_hash);
+        evaluated.insert(game_state.zobrist_hash, score);
         return score;
     }
 
@@ -40,7 +40,7 @@ pub fn minimax(
     for m in moves {
         let mut new_game_state = game_state.clone();
         new_game_state.apply_move(m).unwrap();
-        if visited.contains(&new_game_state) {
+        if visited.contains(&new_game_state.zobrist_hash) {
             continue;
         }
 
@@ -65,14 +65,16 @@ pub fn minimax(
         best_score = 0;
     }
 
-    visited.remove(game_state);
-    evaluated.insert(game_state.clone(), best_score);
+    visited.remove(&game_state.zobrist_hash);
+    evaluated.insert(game_state.zobrist_hash, best_score);
 
     best_score
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::r#move::Move;
+
     use super::*;
 
     #[test]
@@ -82,21 +84,21 @@ mod tests {
 
         // 16 positions with single cubie, 72 with both, 1 empty, *2 for player_to_move
         assert_eq!(evaluated.len(), 178);
-        assert_eq!(evaluated[&game], 0);
+        assert_eq!(evaluated[&game.zobrist_hash], 0);
     }
 
     #[test]
     fn test_3_0_game_won_by_p1() {
         let game = GameState::new(3, 0);
         let evaluated = evaluate(&game);
-        assert_eq!(evaluated[&game], 1);
+        assert_eq!(evaluated[&game.zobrist_hash], 1);
     }
 
     #[test]
     fn test_1_4_game_won_by_p2() {
         let game = GameState::new(1, 4);
         let evaluated = evaluate(&game);
-        assert_eq!(evaluated[&game], -1);
+        assert_eq!(evaluated[&game.zobrist_hash], -1);
     }
 
     /// cargo test --release test_4_4_game -- --nocapture --ignored
@@ -107,7 +109,7 @@ mod tests {
         // TODO: extract winning strategy
         let game = GameState::new(4, 4);
         let evaluated = evaluate(&game);
-        println!("Game evaluation: {}", evaluated[&game]);
+        println!("Game evaluation: {}", evaluated[&game.zobrist_hash]);
         println!("Number of evaluated states: {}", evaluated.len());
     }
 }

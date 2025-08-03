@@ -53,7 +53,7 @@ impl Cage {
         x == 1 && y == 1
     }
 
-    pub fn drop(&mut self, color: Cubie, (x, y): (usize, usize)) -> Result<(), &'static str> {
+    pub fn drop(&mut self, color: Cubie, (x, y): (usize, usize)) -> Result<usize, &'static str> {
         if Self::is_center(x, y) {
             return Err("Cannot drop into the center column");
         }
@@ -65,7 +65,7 @@ impl Cage {
         for z in 0..3 {
             if self.grid[x][y][z].is_none() {
                 self.grid[x][y][z] = Some(color);
-                return Ok(());
+                return Ok(z);
             }
         }
 

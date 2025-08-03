@@ -2,6 +2,7 @@ use crate::{
     cage::Cage,
     cubie::Cubie,
     r#move::{Layer, Move, Rotation},
+    zobrist,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -17,6 +18,7 @@ pub struct GameState {
     pub players: [Player; 2],
     pub remaining_cubies: [u8; 2],
     pub player_to_move: Player,
+    pub zobrist_hash: u64,
 }
 
 impl GameState {
@@ -37,6 +39,7 @@ impl GameState {
             players,
             remaining_cubies: [p1_cubies, p2_cubies],
             player_to_move: players[0],
+            zobrist_hash: 0,
         }
     }
 
@@ -81,26 +84,47 @@ impl GameState {
     }
 
     pub fn apply_move(&mut self, r#move: Move) -> Result<(), &'static str> {
-        match r#move {
-            Move::Drop { color, column } => {
-                self.cage.drop(color, column)?;
-                self.remaining_cubies[self.player_to_move.id as usize] -= 1;
-            }
-            Move::Flip => {
-                self.cage.flip();
-            }
-            Move::RotateLayer { layer, rotation } => {
-                self.cage.rotate_layer(layer, rotation);
-            }
-        }
-
+        let current_player = self.player_to_move;
         self.player_to_move = if self.player_to_move.id == 0 {
             self.players[1]
         } else {
             self.players[0]
         };
 
+        match r#move {
+            Move::Drop { color, column } => {
+                let z = self.cage.drop(color, column)?;
+                self.zobrist_hash ^= zobrist::POS_COLOR[color as usize][column.0][column.1][z];
+                self.zobrist_hash ^= *zobrist::P2_TO_MOVE;
+                self.remaining_cubies[current_player.id as usize] -= 1;
+            }
+            Move::Flip => {
+                self.cage.flip();
+                self.rebuild_zobrist_hash();
+            }
+            Move::RotateLayer { layer, rotation } => {
+                self.cage.rotate_layer(layer, rotation);
+                self.rebuild_zobrist_hash();
+            }
+        }
+
         Ok(())
+    }
+
+    fn rebuild_zobrist_hash(&mut self) {
+        self.zobrist_hash = 0;
+        for x in 0..3 {
+            for y in 0..3 {
+                for z in 0..3 {
+                    if let Some(cubie) = self.cage.grid[x][y][z] {
+                        self.zobrist_hash ^= zobrist::POS_COLOR[cubie as usize][x][y][z];
+                    }
+                }
+            }
+        }
+        if self.player_to_move.id == 1 {
+            self.zobrist_hash ^= *zobrist::P2_TO_MOVE;
+        }
     }
 }
 
@@ -185,5 +209,56 @@ mod tests {
                 .iter()
                 .any(|m| matches!(m, Move::Drop { .. }))
         );
+    }
+
+    #[test]
+    fn test_zobrist_single_drop() {
+        let mut game = GameState::new(2, 2);
+        game.apply_move(Move::Drop {
+            color: game.player_to_move.color,
+            column: (0, 0),
+        })
+        .unwrap();
+        let zobrist1 = game.zobrist_hash;
+
+        game.rebuild_zobrist_hash();
+        let zobrist2 = game.zobrist_hash;
+
+        assert_eq!(zobrist1, zobrist2);
+    }
+
+    #[test]
+    fn test_zobrist_drop_and_rotate() {
+        let mut game1 = GameState::new(2, 2);
+        game1
+            .apply_move(Move::Drop {
+                color: game1.player_to_move.color,
+                column: (0, 0),
+            })
+            .unwrap();
+
+        let mut game2 = GameState::new(2, 2);
+        game2
+            .apply_move(Move::Drop {
+                color: game2.player_to_move.color,
+                column: (2, 0),
+            })
+            .unwrap();
+        game2
+            .apply_move(Move::RotateLayer {
+                layer: Layer::Down,
+                rotation: Rotation::CounterClockwise,
+            })
+            .unwrap();
+
+        // Same cage, different player to move
+        assert_ne!(game1.zobrist_hash, game2.zobrist_hash);
+
+        // Pass the turn to player 1
+        game1.apply_move(Move::RotateLayer {
+            layer: Layer::Up,
+            rotation: Rotation::Clockwise,
+        }).unwrap();
+        assert_eq!(game1.zobrist_hash, game2.zobrist_hash);
     }
 }

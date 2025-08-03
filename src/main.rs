@@ -4,6 +4,7 @@ mod game;
 mod line;
 mod r#move;
 mod search;
+mod zobrist;
 
 use cage::Cage;
 use std::str::FromStr;
