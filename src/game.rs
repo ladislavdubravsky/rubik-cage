@@ -73,7 +73,6 @@ impl GameState {
             for rotation in [
                 Rotation::Clockwise,
                 Rotation::CounterClockwise,
-                Rotation::HalfTurn,
             ] {
                 let r#move = Move::RotateLayer { layer, rotation };
                 moves.push(r#move);
@@ -136,7 +135,7 @@ mod tests {
     fn test_legal_moves_initial_state() {
         let game = GameState::new(4, 4);
         let legal_moves = game.legal_moves();
-        assert!(legal_moves.len() == 18);
+        assert!(legal_moves.len() == 15);
     }
 
     #[test]
@@ -147,7 +146,7 @@ mod tests {
         }
 
         let legal_moves = game.legal_moves();
-        assert!(legal_moves.len() == 17);
+        assert!(legal_moves.len() == 14);
         assert!(!legal_moves.contains(&Move::Drop {
             color: game.player_to_move.color,
             column: (0, 0)
