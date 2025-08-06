@@ -6,11 +6,27 @@ mod r#move;
 mod search;
 mod zobrist;
 
-use cage::Cage;
-use std::str::FromStr;
+use yew::prelude::*;
+
+#[function_component]
+fn App() -> Html {
+    let counter = use_state(|| 0);
+    let onclick = {
+        let counter = counter.clone();
+        move |_| {
+            let value = *counter + 1;
+            counter.set(value);
+        }
+    };
+
+    html! {
+        <div>
+            <button {onclick}>{ "+1" }</button>
+            <p>{ *counter }</p>
+        </div>
+    }
+}
 
 fn main() {
-    let cage = Cage::from_str("R........,GB.......,YOW.....B").unwrap();
-    cage.draw();
-    println!("Someone won?: {}", cage.has_line().is_some());
+    yew::Renderer::<App>::new().render();
 }
