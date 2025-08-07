@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::{cage::Cage, cubie::Cubie};
+use crate::core::{cage::Cage, cubie::Cubie};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Rotation {

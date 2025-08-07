@@ -1,4 +1,4 @@
-use crate::game::GameState;
+use crate::core::game::GameState;
 use std::collections::{HashMap, HashSet};
 
 pub fn evaluate(game_state: &GameState) -> HashMap<u64, isize> {
@@ -73,8 +73,6 @@ pub fn minimax(
 
 #[cfg(test)]
 mod tests {
-    use crate::r#move::Move;
-
     use super::*;
 
     #[test]

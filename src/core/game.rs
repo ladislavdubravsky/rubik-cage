@@ -1,4 +1,4 @@
-use crate::{
+use crate::core::{
     cage::Cage,
     cubie::Cubie,
     r#move::{Layer, Move, Rotation},
@@ -70,10 +70,7 @@ impl GameState {
 
         // Rotations
         for layer in [Layer::Down, Layer::Equator, Layer::Up] {
-            for rotation in [
-                Rotation::Clockwise,
-                Rotation::CounterClockwise,
-            ] {
+            for rotation in [Rotation::Clockwise, Rotation::CounterClockwise] {
                 let r#move = Move::RotateLayer { layer, rotation };
                 moves.push(r#move);
             }
@@ -254,10 +251,12 @@ mod tests {
         assert_ne!(game1.zobrist_hash, game2.zobrist_hash);
 
         // Pass the turn to player 1
-        game1.apply_move(Move::RotateLayer {
-            layer: Layer::Up,
-            rotation: Rotation::Clockwise,
-        }).unwrap();
+        game1
+            .apply_move(Move::RotateLayer {
+                layer: Layer::Up,
+                rotation: Rotation::Clockwise,
+            })
+            .unwrap();
         assert_eq!(game1.zobrist_hash, game2.zobrist_hash);
     }
 }

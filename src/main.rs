@@ -1,10 +1,5 @@
-mod cage;
-mod cubie;
-mod game;
-mod line;
-mod r#move;
+mod core;
 mod search;
-mod zobrist;
 
 use yew::prelude::*;
 

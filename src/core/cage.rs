@@ -1,4 +1,4 @@
-use crate::{
+use crate::core::{
     cubie::Cubie,
     line::{Line, SLOT_TO_LINES},
 };

@@ -53,7 +53,7 @@ pub static SLOT_TO_LINES: LazyLock<HashMap<Slot, Vec<Line>>> = LazyLock::new(|| 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{cage::Cage, cubie::Cubie};
+    use crate::core::{cage::Cage, cubie::Cubie};
 
     #[test]
     fn test_draw_lines() {
