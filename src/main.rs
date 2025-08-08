@@ -1,23 +1,16 @@
+mod app;
 mod core;
 mod search;
 
+use app::cube::Cube;
 use yew::prelude::*;
 
-#[function_component]
-fn App() -> Html {
-    let counter = use_state(|| 0);
-    let onclick = {
-        let counter = counter.clone();
-        move |_| {
-            let value = *counter + 1;
-            counter.set(value);
-        }
-    };
-
+#[function_component(App)]
+fn app() -> Html {
     html! {
-        <div>
-            <button {onclick}>{ "+1" }</button>
-            <p>{ *counter }</p>
+        <div class="app">
+            <h1>{ "Rubik's Cage" }</h1>
+            <Cube />
         </div>
     }
 }
