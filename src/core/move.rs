@@ -48,6 +48,18 @@ impl Move {
     }
 }
 
+impl std::fmt::Display for Move {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Move::Drop { color, column } => write!(f, "Drop {} at {:?}", color, column),
+            Move::RotateLayer { layer, rotation } => {
+                write!(f, "Rotate {:?} layer {:?}", layer, rotation)
+            }
+            Move::Flip => write!(f, "Flip"),
+        }
+    }
+}
+
 impl Cage {
     pub fn is_center(x: usize, y: usize) -> bool {
         x == 1 && y == 1

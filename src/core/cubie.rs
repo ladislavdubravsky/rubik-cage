@@ -34,3 +34,17 @@ impl Cubie {
         }
     }
 }
+
+impl std::fmt::Display for Cubie {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Cubie::White => "white",
+            Cubie::Yellow => "yellow",
+            Cubie::Red => "red",
+            Cubie::Orange => "orange",
+            Cubie::Blue => "blue",
+            Cubie::Green => "green",
+        };
+        write!(f, "{}", s)
+    }
+}

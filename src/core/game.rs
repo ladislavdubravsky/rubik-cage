@@ -29,7 +29,7 @@ impl GameState {
                 id: 0,
             },
             Player {
-                color: Cubie::Green,
+                color: Cubie::Red,
                 id: 1,
             },
         ];

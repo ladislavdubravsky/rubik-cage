@@ -1,31 +1,28 @@
+use crate::core::game::{GameState, Player};
 use yew::prelude::*;
 
 #[derive(Properties, PartialEq)]
 pub struct PlayerPanelProps {
-    pub player_id: u8,
-    pub is_turn: bool,
+    pub player: Player,
+    pub game_state: UseStateHandle<GameState>,
 }
 
 #[function_component(PlayerPanel)]
 pub fn player_panel(props: &PlayerPanelProps) -> Html {
-    let color = if props.player_id == 1 { "blue" } else { "red" };
+    let is_turn = props.game_state.player_to_move.id == props.player.id;
     let move_list_visible = use_state(|| false);
 
-    let cubies = (0..12).map(|i| {
+    let cubies = (0..props.game_state.remaining_cubies[props.player.id as usize]).map(|i| {
         html! {
-            <div class={classes!("cubie-icon", color)} key={i} />
+            <div class={classes!("cubie-icon", props.player.color.to_string())} key={i} />
         }
     });
 
-    let moves = vec![
-        ("Drop A1", "Blue Wins"),
-        ("Rotate Up", "Draw"),
-        ("Flip", "Red Wins"),
-    ];
+    let moves = props.game_state.legal_moves();
 
     html! {
-        <div class={classes!("player-panel", if props.is_turn { "active-turn" } else { "" })}>
-            <h2>{ format!("Player {}", props.player_id) }</h2>
+        <div class={classes!("player-panel", if is_turn { "active-turn" } else { "" })}>
+            <h2>{ format!("Player {}", props.player.id + 1) }</h2>
             <p>{ "Remaining cubies:" }</p>
             <div class="cubies-remaining">
                 { for cubies }
@@ -42,14 +39,14 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                         }
                     }}
                 />
-                { "Show moves with evaluation" }
+                { "Show move evaluation" }
             </label>
             {
-                if *move_list_visible {
+                if *move_list_visible && is_turn {
                     html! {
                         <ul class="move-list">
-                            { for moves.iter().map(|(mv, eval)| html! {
-                                <li>{ format!("{} ({})", mv, eval) }</li>
+                            { for moves.iter().map(|mv| html! {
+                                <li>{ format!("{} ({})", mv, "-") }</li>
                             })}
                         </ul>
                     }

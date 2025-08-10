@@ -16,3 +16,7 @@
     padding: 40px;
     align-items: stretch;
 }
+
+h1, p {
+    margin-bottom: 0.25em;
+}
