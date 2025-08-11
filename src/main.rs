@@ -10,33 +10,6 @@ use yew::prelude::*;
 fn app() -> Html {
     let game_state = use_state(|| GameState::new(12, 12));
 
-    // TODO: this is just temporary 2 cubie drop before we get interactive drops
-    let initialized = use_state(|| false);
-    {
-        let game_state = game_state.clone();
-        let initialized = initialized.clone();
-        use_effect(move || {
-            if !*initialized {
-                let mut new_state = (*game_state).clone();
-                new_state
-                    .apply_move(Move::Drop {
-                        color: new_state.players[0].color,
-                        column: (0, 0),
-                    })
-                    .unwrap();
-                new_state
-                    .apply_move(Move::Drop {
-                        color: new_state.players[1].color,
-                        column: (0, 0),
-                    })
-                    .unwrap();
-                game_state.set(new_state);
-                initialized.set(true);
-            }
-            || ()
-        });
-    }
-
     html! {
         <div class="app">
             <h1>{ "Rubik's Cage Simulator" }</h1>

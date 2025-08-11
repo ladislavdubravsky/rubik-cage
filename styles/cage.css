@@ -24,5 +24,14 @@
     width: 60px;
     height: 60px;
     border-radius: 4px;
-    box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+    box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.8);
+}
+
+.slot.center-slot {
+    opacity: 0.5;
+}
+
+.slot.top-slot:hover {
+    background-color: var(--slot-hover-color);
+    opacity: 0.3;
 }
