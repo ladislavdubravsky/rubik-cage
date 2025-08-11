@@ -2,12 +2,12 @@ use crate::core::game::GameState;
 use yew::prelude::*;
 
 #[derive(Properties, PartialEq)]
-pub struct CubeProps {
+pub struct CageProps {
     pub game_state: UseStateHandle<GameState>,
 }
 
-#[function_component(Cube)]
-pub fn cube(props: &CubeProps) -> Html {
+#[function_component(Cage)]
+pub fn cage(props: &CageProps) -> Html {
     html! {
         <div class="cage">
             { for (0..3).rev().map(|z| html! {

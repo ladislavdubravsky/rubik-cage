@@ -3,7 +3,7 @@ mod core;
 mod search;
 
 use crate::core::{game::GameState, r#move::Move};
-use app::{cube::Cube, player::PlayerPanel};
+use app::{cage::Cage, player::PlayerPanel};
 use yew::prelude::*;
 
 #[function_component(App)]
@@ -43,7 +43,7 @@ fn app() -> Html {
             <p>{ "Place cubies, rotate layers, and try to get three in a line!" }</p>
             <div class="game-area">
                 <PlayerPanel game_state={game_state.clone()} player={game_state.players[0]} />
-                <Cube game_state={game_state.clone()} />
+                <Cage game_state={game_state.clone()} />
                 <PlayerPanel game_state={game_state.clone()} player={game_state.players[1]} />
             </div>
         </div>

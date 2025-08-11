@@ -1,2 +1,2 @@
-pub mod cube;
+pub mod cage;
 pub mod player;
