@@ -6,7 +6,8 @@
 
 .layer {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    gap: 60px;
     align-items: center;
     margin-top: -40px;
 }
