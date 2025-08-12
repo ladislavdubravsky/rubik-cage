@@ -10,6 +10,14 @@ pub struct CageProps {
 pub fn cage(props: &CageProps) -> Html {
     let player_to_move_color = props.game_state.player_to_move.color;
 
+    let game_state_handle = props.game_state.clone();
+    let on_flip = Callback::from(move |_| {
+        let mut new_state = (*game_state_handle).clone();
+        if new_state.apply_move(Move::Flip).is_ok() {
+            game_state_handle.set(new_state);
+        }
+    });
+
     html! {
         <div class="cage">
             { for (0..3).rev().map(|z| html! {
@@ -53,6 +61,7 @@ pub fn cage(props: &CageProps) -> Html {
                     </div>
                 </div>
             }) }
+            <button onclick={on_flip}>{ "Flip" }</button>
         </div>
     }
 }
