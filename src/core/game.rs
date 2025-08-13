@@ -19,6 +19,7 @@ pub struct GameState {
     pub remaining_cubies: [u8; 2],
     pub player_to_move: Player,
     pub zobrist_hash: u64,
+    pub last_move: Option<Move>,
 }
 
 impl GameState {
@@ -40,6 +41,7 @@ impl GameState {
             remaining_cubies: [p1_cubies, p2_cubies],
             player_to_move: players[0],
             zobrist_hash: 0,
+            last_move: None,
         }
     }
 
@@ -64,15 +66,18 @@ impl GameState {
             }
         }
 
-        // TODO: Figure out if we need to be preventing previous move inversions (orig. game rule)
-        // Flip
-        moves.push(Move::Flip);
+        // Flip: allowed if not inverting the previous move
+        if self.last_move != Some(Move::Flip) {
+            moves.push(Move::Flip);
+        }
 
-        // Rotations
+        // Rotations: allowed if not inverting the previous move
         for layer in [Layer::Down, Layer::Equator, Layer::Up] {
             for rotation in [Rotation::Clockwise, Rotation::CounterClockwise] {
                 let r#move = Move::RotateLayer { layer, rotation };
-                moves.push(r#move);
+                if self.last_move != r#move.inverse() {
+                    moves.push(r#move);
+                }
             }
         }
 
@@ -86,6 +91,7 @@ impl GameState {
         } else {
             self.players[0]
         };
+        self.last_move = Some(r#move);
 
         match r#move {
             Move::Drop { color, column } => {

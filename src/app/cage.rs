@@ -24,12 +24,16 @@ pub fn cage(props: &CageProps) -> Html {
     html! {
         <div class="cage">
             { for [Layer::Up, Layer::Equator, Layer::Down].iter().enumerate().map(|(z, layer)| {
+                let rotate_cw = Move::RotateLayer { layer: *layer, rotation: Rotation::Clockwise };
+                let rotate_ccw = Move::RotateLayer { layer: *layer, rotation: Rotation::CounterClockwise };
+
                 html! {
                     <div class="layer">
-                        <button class="rotate-button" onclick={apply_move.reform(move |_| Move::RotateLayer {
-                            layer: *layer,
-                            rotation: Rotation::CounterClockwise,
-                        })}>{ "↻" }</button>
+                        <button
+                            class="rotate-button"
+                            onclick={apply_move.reform(move |_| rotate_ccw)}
+                            disabled={props.game_state.last_move == Some(rotate_cw)}
+                        >{ "↻" }</button>
 
                         <div class="grid">
                             { for (0..9).map(|i| {
@@ -69,14 +73,18 @@ pub fn cage(props: &CageProps) -> Html {
                             }) }
                         </div>
 
-                        <button class="rotate-button" onclick={apply_move.reform(move |_| Move::RotateLayer {
-                            layer: *layer,
-                            rotation: Rotation::Clockwise,
-                        })}>{ "↺" }</button>
+                        <button
+                            class="rotate-button"
+                            onclick={apply_move.reform(move |_| rotate_cw)}
+                            disabled={props.game_state.last_move == Some(rotate_ccw)}
+                        >{ "↺" }</button>
                     </div>
                 }
             }) }
-            <button onclick={apply_move.reform(|_| Move::Flip)}>{ "Flip" }</button>
+            <button
+                onclick={apply_move.reform(|_| Move::Flip)}
+                disabled={props.game_state.last_move == Some(Move::Flip)}
+            >{ "Flip" }</button>
         </div>
     }
 }
