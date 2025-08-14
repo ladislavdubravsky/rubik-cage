@@ -1,5 +1,8 @@
 use crate::core::game::GameState;
 use std::collections::{HashMap, HashSet};
+use std::error::Error;
+use std::fs::File;
+use std::io::{Read, Write};
 
 pub fn evaluate(game_state: &GameState) -> HashMap<u64, isize> {
     let mut visited = HashSet::new();
@@ -71,6 +74,26 @@ pub fn minimax(
     best_score
 }
 
+pub fn save_eval(map: &HashMap<u64, isize>, path: &str) -> Result<(), Box<dyn Error>> {
+    let config = bincode::config::standard();
+    let encoded: Vec<u8> = bincode::encode_to_vec(map, config)?;
+    let mut file = File::create(path)?;
+    file.write_all(&encoded)?;
+
+    Ok(())
+}
+
+pub fn load_eval(path: &str) -> Result<HashMap<u64, isize>, Box<dyn Error>> {
+    let mut file = File::open(path)?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
+    let config = bincode::config::standard();
+    let (decoded_map, _len): (HashMap<u64, isize>, usize) =
+        bincode::decode_from_slice(&buffer, config)?;
+
+    Ok(decoded_map)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -104,10 +127,13 @@ mod tests {
     #[ignore]
     #[test]
     fn test_4_4_game() {
-        // TODO: extract winning strategy
         let game = GameState::new(4, 4);
         let evaluated = evaluate(&game);
         println!("Game evaluation: {}", evaluated[&game.zobrist_hash]);
         println!("Number of evaluated states: {}", evaluated.len());
+
+        save_eval(&evaluated, "eval.bin").unwrap();
+        let loaded = load_eval("eval.bin").unwrap();
+        assert_eq!(loaded, evaluated);
     }
 }
