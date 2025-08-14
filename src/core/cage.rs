@@ -4,7 +4,7 @@ use crate::core::{
 };
 use std::{collections::HashMap, str::FromStr};
 
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Cage {
     pub grid: [[[Option<Cubie>; 3]; 3]; 3],
 }
@@ -50,6 +50,41 @@ impl Cage {
         }
 
         None // No lines found
+    }
+
+    /// This function is only used in normalizing the representation of the cage.
+    fn flip_horizontal(&mut self) {
+        self.grid.swap(0, 2);
+    }
+
+    /// This function is only used in normalizing the representation of the cage.
+    fn rotate_cage(&mut self) {
+        let mut new_grid = [[[None; 3]; 3]; 3];
+        for x in 0..3 {
+            for y in 0..3 {
+                for z in 0..3 {
+                    new_grid[y][2 - x][z] = self.grid[x][y][z];
+                }
+            }
+        }
+        self.grid = new_grid;
+    }
+
+    /// Symmetric cages have the same game evaluation, normalize to reduce the search space.
+    fn normalize(&mut self) {
+        let mut largest = self.grid;
+
+        for _ in 0..2 {
+            for _ in 0..4 {
+                self.rotate_cage();
+                if self.grid > largest {
+                    largest = self.grid;
+                }
+            }
+            self.flip_horizontal();
+        }
+
+        self.grid = largest;
     }
 }
 
@@ -112,5 +147,42 @@ mod tests {
         let cage_full = Cage::from_str("WYRBOGGOB,OGBYRYWBG,ROWBYGOWB").unwrap();
         assert!(cage_full.has_line().is_none());
         cage_full.draw();
+    }
+
+    #[test]
+    fn test_flip_horizontal() {
+        let mut cage = Cage::from_str("R........,G........,B........").unwrap();
+        cage.draw();
+
+        println!("Flipped:");
+        cage.flip_horizontal();
+        cage.draw();
+
+        let flipped = Cage::from_str("..R......,..G......,..B......").unwrap();
+        assert_eq!(cage, flipped);
+    }
+
+    #[test]
+    fn test_rotate_cage() {
+        let mut cage = Cage::from_str("R........,G........,BY.......").unwrap();
+        cage.draw();
+
+        println!("Rotated:");
+        cage.rotate_cage();
+        cage.draw();
+
+        let rotated = Cage::from_str("......R..,......G..,...Y..B..").unwrap();
+        assert_eq!(cage, rotated);
+    }
+
+    #[test]
+    fn test_normalize() {
+        // we expect lexicographically largest symmetry
+        let mut cage = Cage::from_str("........R,........G,.......YB").unwrap();
+        println!("Cage: {:?}", cage);
+        cage.normalize();
+        println!("Normalized: {:?}", cage);
+        let normalized = Cage::from_str("R........,G........,B..Y.....").unwrap();
+        assert_eq!(cage, normalized);
     }
 }
