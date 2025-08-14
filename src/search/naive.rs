@@ -96,6 +96,8 @@ pub fn load_eval(path: &str) -> Result<HashMap<u64, isize>, Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+
     use super::*;
 
     #[test]
@@ -135,5 +137,21 @@ mod tests {
         save_eval(&evaluated, "eval.bin").unwrap();
         let loaded = load_eval("eval.bin").unwrap();
         assert_eq!(loaded, evaluated);
+    }
+
+    /// cargo test --release test_12_12_game -- --nocapture --ignored
+    #[ignore]
+    #[test]
+    fn test_12_12_game() {
+        let game = GameState::new(12, 12);
+        let stack_size = 8 * 1024 * 1024;
+        let evaluated = thread::Builder::new()
+            .stack_size(stack_size)
+            .spawn(move || evaluate(&game))
+            .unwrap()
+            .join()
+            .unwrap();
+        println!("Game evaluation: {}", evaluated[&game.zobrist_hash]);
+        println!("Number of evaluated states: {}", evaluated.len());
     }
 }
