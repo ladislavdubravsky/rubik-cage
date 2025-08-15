@@ -31,8 +31,3 @@
 .slot.center-slot {
     opacity: 0.5;
 }
-
-.slot.top-slot:hover {
-    background-color: var(--slot-hover-color);
-    opacity: 0.3;
-}

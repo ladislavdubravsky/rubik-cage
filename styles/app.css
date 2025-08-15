@@ -17,6 +17,10 @@
     align-items: stretch;
 }
 
+.highlighted {
+    background: color-mix(in srgb, var(--highlight-color) 60%, transparent) !important;
+}
+
 h1, p {
     margin-bottom: 0.25em;
 }

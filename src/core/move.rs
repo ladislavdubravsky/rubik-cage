@@ -54,8 +54,9 @@ impl std::fmt::Display for Move {
             Move::Drop { column, .. } => write!(f, "Drop at {},{}", column.0, column.1),
             Move::RotateLayer { layer, rotation } => {
                 let rotation = match rotation {
-                    Rotation::Clockwise => "CW",
-                    Rotation::CounterClockwise => "CCW",
+                    // TODO: proper fix
+                    Rotation::Clockwise => "CCW",
+                    Rotation::CounterClockwise => "CW",
                     Rotation::HalfTurn => "HT",
                 };
                 write!(f, "Rotate {:?} {}", layer, rotation)
