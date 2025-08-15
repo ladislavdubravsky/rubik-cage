@@ -7,7 +7,10 @@ use std::io::{Read, Write};
 pub fn evaluate(game_state: &GameState) -> HashMap<u64, isize> {
     let mut visited = HashSet::new();
     let mut evaluated = HashMap::new();
-    minimax(game_state, &mut visited, &mut evaluated);
+    let mut game_state = game_state.clone();
+    game_state.normalize();
+
+    minimax(&game_state, &mut visited, &mut evaluated);
     evaluated
 }
 
@@ -42,7 +45,7 @@ pub fn minimax(
     let moves = game_state.legal_moves();
     for m in moves {
         let mut new_game_state = game_state.clone();
-        new_game_state.apply_move(m).unwrap();
+        new_game_state.apply_move_normalize(m).unwrap();
         if visited.contains(&new_game_state.zobrist_hash) {
             continue;
         }
@@ -144,7 +147,7 @@ mod tests {
     #[test]
     fn test_12_12_game() {
         let game = GameState::new(12, 12);
-        let stack_size = 8 * 1024 * 1024;
+        let stack_size = 32 * 1024 * 1024;
         let evaluated = thread::Builder::new()
             .stack_size(stack_size)
             .spawn(move || evaluate(&game))
@@ -153,5 +156,7 @@ mod tests {
             .unwrap();
         println!("Game evaluation: {}", evaluated[&game.zobrist_hash]);
         println!("Number of evaluated states: {}", evaluated.len());
+
+        save_eval(&evaluated, "eval.bin").unwrap();
     }
 }

@@ -2,7 +2,7 @@ mod app;
 mod core;
 mod search;
 
-use crate::core::{game::GameState, r#move::Move};
+use crate::core::game::GameState;
 use app::{cage::Cage, player::PlayerPanel};
 use yew::prelude::*;
 

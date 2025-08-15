@@ -71,20 +71,26 @@ impl Cage {
     }
 
     /// Symmetric cages have the same game evaluation, normalize to reduce the search space.
-    fn normalize(&mut self) {
+    pub fn normalize(&mut self) -> bool {
         let mut largest = self.grid;
 
-        for _ in 0..2 {
+        let mut reflection_happened = false;
+        for i in 0..2 {
             for _ in 0..4 {
                 self.rotate_cage();
                 if self.grid > largest {
                     largest = self.grid;
+                    if i == 1 {
+                        reflection_happened = true;
+                    }
                 }
             }
             self.flip_horizontal();
         }
 
         self.grid = largest;
+
+        reflection_happened
     }
 }
 

@@ -84,13 +84,17 @@ impl GameState {
         moves
     }
 
-    pub fn apply_move(&mut self, r#move: Move) -> Result<(), &'static str> {
-        let current_player = self.player_to_move;
+    fn advance_player_to_move(&mut self) {
         self.player_to_move = if self.player_to_move.id == 0 {
             self.players[1]
         } else {
             self.players[0]
         };
+    }
+
+    pub fn apply_move(&mut self, r#move: Move) -> Result<(), &'static str> {
+        let current_player = self.player_to_move;
+        self.advance_player_to_move();
         self.last_move = Some(r#move);
 
         match r#move {
@@ -109,6 +113,51 @@ impl GameState {
                 self.rebuild_zobrist_hash();
             }
         }
+
+        Ok(())
+    }
+
+    pub fn normalize(&mut self) {
+        let reflection_happened = self.cage.normalize();
+        if reflection_happened {
+            self.last_move = match self.last_move {
+                Some(Move::Flip) => Some(Move::Flip),
+                Some(Move::Drop { color, column }) => {
+                    Some(Move::Drop {
+                        color,
+                        column: (2 - column.0, column.1),
+                    })
+                }
+                Some(Move::RotateLayer { layer, rotation }) => {
+                    Some(Move::RotateLayer {
+                        layer,
+                        rotation: match rotation {
+                            Rotation::Clockwise => Rotation::CounterClockwise,
+                            Rotation::CounterClockwise => Rotation::Clockwise,
+                            Rotation::HalfTurn => Rotation::HalfTurn,
+                        },
+                    })
+                }
+                None => None,
+            }
+        }
+        self.rebuild_zobrist_hash();
+    }
+
+    pub fn apply_move_normalize(&mut self, r#move: Move) -> Result<(), &'static str> {
+        let current_player = self.player_to_move;
+        self.advance_player_to_move();
+
+        match r#move {
+            Move::Drop { color, column } => {
+                self.cage.drop(color, column)?;
+                self.remaining_cubies[current_player.id as usize] -= 1;
+            }
+            Move::Flip => self.cage.flip(),
+            Move::RotateLayer { layer, rotation } => self.cage.rotate_layer(layer, rotation),
+        }
+        
+        self.normalize();
 
         Ok(())
     }
