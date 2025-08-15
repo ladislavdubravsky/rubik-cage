@@ -4,7 +4,16 @@ mod search;
 
 use crate::core::game::GameState;
 use app::{cage::Cage, player::PlayerPanel};
+use std::{collections::HashMap, sync::LazyLock};
 use yew::prelude::*;
+
+pub static EVAL: LazyLock<HashMap<u64, isize>> = LazyLock::new(|| {
+    const EVAL_BIN: &[u8] = include_bytes!("../assets/eval.bin");
+    let config = bincode::config::standard();
+    let (map, _len): (HashMap<u64, isize>, usize) =
+        bincode::decode_from_slice(EVAL_BIN, config).unwrap();
+    map
+});
 
 #[function_component(App)]
 fn app() -> Html {

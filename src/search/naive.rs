@@ -4,6 +4,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{Read, Write};
 
+// TODO: track W/L/D in how many moves
 pub fn evaluate(game_state: &GameState) -> HashMap<u64, isize> {
     let mut visited = HashSet::new();
     let mut evaluated = HashMap::new();

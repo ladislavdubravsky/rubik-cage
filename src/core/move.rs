@@ -20,7 +20,7 @@ pub enum Move {
     Drop {
         color: Cubie,
         column: (usize, usize),
-    }, // (x, y) coordinates
+    },
     RotateLayer {
         layer: Layer,
         rotation: Rotation,
@@ -51,9 +51,14 @@ impl Move {
 impl std::fmt::Display for Move {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Move::Drop { color, column } => write!(f, "Drop {} at {:?}", color, column),
+            Move::Drop { column, .. } => write!(f, "Drop at {},{}", column.0, column.1),
             Move::RotateLayer { layer, rotation } => {
-                write!(f, "Rotate {:?} layer {:?}", layer, rotation)
+                let rotation = match rotation {
+                    Rotation::Clockwise => "CW",
+                    Rotation::CounterClockwise => "CCW",
+                    Rotation::HalfTurn => "HT",
+                };
+                write!(f, "Rotate {:?} {}", layer, rotation)
             }
             Move::Flip => write!(f, "Flip"),
         }
