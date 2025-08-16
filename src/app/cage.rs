@@ -7,12 +7,14 @@ use yew::prelude::*;
 #[derive(Properties, PartialEq)]
 pub struct CageProps {
     pub game_state: UseStateHandle<GameState>,
+    pub history: UseStateHandle<Vec<GameState>>,
 }
 
 #[function_component(Cage)]
 pub fn cage(props: &CageProps) -> Html {
     let player_to_move_color = props.game_state.player_to_move.color;
     let game_state_handle = props.game_state.clone();
+    let history_handle = props.history.clone();
     let (hovered_move, set_hovered_move) = use_hovered_move();
     let is_hovered_flip = hovered_move.0.as_ref().map_or(false, |h| h.as_ref() == &Move::Flip);
 
@@ -21,10 +23,14 @@ pub fn cage(props: &CageProps) -> Html {
 
     let apply_move = {
         let game_state_handle = game_state_handle.clone();
+        let history_handle = history_handle.clone();
         Callback::from(move |m: Move| {
             if !game_frozen {
                 let mut new_state = (*game_state_handle).clone();
                 if new_state.apply_move(m).is_ok() {
+                    let mut new_history = (*history_handle).clone();
+                    new_history.push((*game_state_handle).clone());
+                    history_handle.set(new_history);
                     game_state_handle.set(new_state);
                 }
             }
@@ -65,18 +71,10 @@ pub fn cage(props: &CageProps) -> Html {
 
                                 // Cubie drops are implemented by clicking on top layer slots.
                                 let onclick = if z == 0 && i != 4 && cubie.is_none() && !game_frozen {
-                                    let game_state_handle = props.game_state.clone();
                                     let color = player_to_move_color.clone();
-
-                                    Some(Callback::from(move |_| {
-                                        let mut new_state = (*game_state_handle).clone();
-                                        let res = new_state.apply_move(Move::Drop {
-                                            color,
-                                            column: (i / 3, i % 3),
-                                        });
-                                        if res.is_ok() {
-                                            game_state_handle.set(new_state);
-                                        }
+                                    Some(apply_move.reform(move |_| Move::Drop {
+                                        color,
+                                        column: (i / 3, i % 3),
                                     }))
                                 } else {
                                     None
@@ -171,9 +169,29 @@ pub fn cage(props: &CageProps) -> Html {
             </h2>
 
             <button
-                onclick={Callback::from(move |_| {
-                    game_state_handle.set(GameState::new(12, 12));
-                })}
+                onclick={{
+                    let game_state_handle = game_state_handle.clone();
+                    let history_handle = history_handle.clone();
+                    Callback::from(move |_| {
+                        let mut new_history = (*history_handle).clone();
+                        if let Some(prev_state) = new_history.pop() {
+                            game_state_handle.set(prev_state);
+                            history_handle.set(new_history);
+                        }
+                    })
+                }}
+                disabled={(*history_handle).is_empty()}
+            >{ "Undo last move" }</button>
+
+            <button
+                onclick={{
+                    let game_state_handle = game_state_handle.clone();
+                    let history_handle = history_handle.clone();
+                    Callback::from(move |_| {
+                        game_state_handle.set(GameState::new(12, 12));
+                        history_handle.set(Vec::new());
+                    })
+                }}
             >{ "Restart the game" }</button>
 
         </div>
