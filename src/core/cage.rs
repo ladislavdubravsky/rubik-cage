@@ -34,7 +34,7 @@ impl Cage {
 
     /// Checks if there are 3 same color cubies in a row, column, or diagonal. Center column is not
     /// available!
-    pub fn has_line(&self) -> Option<Cubie> {
+    pub fn has_line(&self) -> Option<(Cubie, Line)> {
         // TODO: use incrementally
         let mut counts: HashMap<(Line, Cubie), u8> = HashMap::new();
 
@@ -43,7 +43,7 @@ impl Cage {
                 for &line in lines {
                     *counts.entry((line, cubie)).or_insert(0) += 1;
                     if counts[&(line, cubie)] == 3 {
-                        return Some(cubie); // Found a line with 3 same color cubies
+                        return Some((cubie, line)); // Found a line with 3 same color cubies
                     }
                 }
             }

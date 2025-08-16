@@ -1,6 +1,7 @@
 use crate::core::{
     cage::Cage,
     cubie::Cubie,
+    line::Line,
     r#move::{Layer, Move, Rotation},
     zobrist,
 };
@@ -115,6 +116,17 @@ impl GameState {
         }
 
         Ok(())
+    }
+
+    pub fn won(&self) -> Option<(Player, Line)> {
+        if let Some((cubie, line)) = self.cage.has_line() {
+            for player in &self.players {
+                if player.color == cubie {
+                    return Some((*player, line));
+                }
+            }
+        }
+        None
     }
 
     pub fn normalize(&mut self) {

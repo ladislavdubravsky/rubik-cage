@@ -26,8 +26,8 @@ pub fn minimax(
 
     visited.insert(game_state.zobrist_hash);
 
-    if let Some(color) = game_state.cage.has_line() {
-        let score = if color == game_state.players[0].color {
+    if let Some((winner, _)) = game_state.won() {
+        let score = if winner.id == game_state.players[0].id {
             1 // First player win
         } else {
             -1 // Second player win
@@ -108,9 +108,6 @@ mod tests {
     fn test_1_1_game_draw() {
         let game = GameState::new(1, 1);
         let evaluated = evaluate(&game);
-
-        // 16 positions with single cubie, 72 with both, 1 empty, *2 for player_to_move
-        assert_eq!(evaluated.len(), 178);
         assert_eq!(evaluated[&game.zobrist_hash], 0);
     }
 

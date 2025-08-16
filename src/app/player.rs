@@ -45,7 +45,11 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
         }
     });
 
-    let moves = props.game_state.legal_moves();
+    let moves = if props.game_state.won().is_some() {
+        Vec::new() // Don't show further moves if game is finished
+    } else {
+        props.game_state.legal_moves()
+    };
     let (hovered_move, set_hovered_move) = use_hovered_move();
 
     html! {

@@ -31,3 +31,8 @@
 .slot.center-slot {
     opacity: 0.5;
 }
+
+.winning-line {
+    outline: 6px solid yellow;
+    outline-offset: -6px;
+}
