@@ -4,21 +4,23 @@ mod search;
 
 use crate::core::game::GameState;
 use app::{cage::Cage, hovered_move::HoveredMoveProvider, player::PlayerPanel};
-use std::{collections::HashMap, sync::LazyLock};
+use std::collections::HashMap;
 use yew::prelude::*;
-
-pub static EVAL: LazyLock<HashMap<u64, isize>> = LazyLock::new(|| {
-    const EVAL_BIN: &[u8] = include_bytes!("../assets/eval.bin");
-    let config = bincode::config::standard();
-    let (map, _len): (HashMap<u64, isize>, usize) =
-        bincode::decode_from_slice(EVAL_BIN, config).unwrap();
-    map
-});
 
 #[function_component(App)]
 fn app() -> Html {
     let game_state = use_state(|| GameState::new(12, 12));
     let history = use_state(|| Vec::new());
+
+    // Load precomputed evaluations for positions at shallow depth (up to 8 cubies placed).
+    // Evaluations for further positions will be calculated on the fly when needed.
+    let eval = use_mut_ref(|| {
+        const EVAL_BIN: &[u8] = include_bytes!("../assets/eval.bin");
+        let config = bincode::config::standard();
+        let (map, _len): (HashMap<u64, isize>, usize) =
+            bincode::decode_from_slice(EVAL_BIN, config).unwrap();
+        map
+    });
 
     html! {
         <div class="app">
@@ -26,9 +28,9 @@ fn app() -> Html {
             <p>{ "Place cubies, rotate layers, and try to get three in a line!" }</p>
             <HoveredMoveProvider>
                 <div class="game-area">
-                    <PlayerPanel game_state={game_state.clone()} player={game_state.players[0]} />
+                    <PlayerPanel game_state={game_state.clone()} player={game_state.players[0]} eval={eval.clone()} />
                     <Cage game_state={game_state.clone()} history={history.clone()} />
-                    <PlayerPanel game_state={game_state.clone()} player={game_state.players[1]} />
+                    <PlayerPanel game_state={game_state.clone()} player={game_state.players[1]} eval={eval.clone()} />
                 </div>
             </HoveredMoveProvider>
         </div>

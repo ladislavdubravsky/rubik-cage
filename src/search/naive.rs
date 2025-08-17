@@ -5,13 +5,13 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 // TODO: track W/L/D in how many moves
-pub fn evaluate(game_state: &GameState) -> HashMap<u64, isize> {
+pub fn evaluate(game_state: &GameState, no_prune: bool) -> HashMap<u64, isize> {
     let mut visited = HashSet::new();
     let mut evaluated = HashMap::new();
     let mut game_state = game_state.clone();
     game_state.normalize();
 
-    minimax(&game_state, &mut visited, &mut evaluated);
+    minimax(&game_state, &mut visited, &mut evaluated, no_prune);
     evaluated
 }
 
@@ -19,6 +19,7 @@ pub fn minimax(
     game_state: &GameState,
     visited: &mut HashSet<u64>,
     evaluated: &mut HashMap<u64, isize>,
+    no_prune: bool,
 ) -> isize {
     if let Some(&score) = evaluated.get(&game_state.zobrist_hash) {
         return score;
@@ -52,16 +53,16 @@ pub fn minimax(
         }
 
         no_children = false;
-        let score = minimax(&new_game_state, visited, evaluated);
+        let score = minimax(&new_game_state, visited, evaluated, no_prune);
 
         if game_state.player_to_move.id == 0 {
             best_score = best_score.max(score);
-            if best_score == 1 {
+            if best_score == 1 && !no_prune {
                 break;
             }
         } else {
             best_score = best_score.min(score);
-            if best_score == -1 {
+            if best_score == -1 && !no_prune {
                 break;
             }
         }
@@ -107,21 +108,21 @@ mod tests {
     #[test]
     fn test_1_1_game_draw() {
         let game = GameState::new(1, 1);
-        let evaluated = evaluate(&game);
+        let evaluated = evaluate(&game, false);
         assert_eq!(evaluated[&game.zobrist_hash], 0);
     }
 
     #[test]
     fn test_3_0_game_won_by_p1() {
         let game = GameState::new(3, 0);
-        let evaluated = evaluate(&game);
+        let evaluated = evaluate(&game, false);
         assert_eq!(evaluated[&game.zobrist_hash], 1);
     }
 
     #[test]
     fn test_1_4_game_won_by_p2() {
         let game = GameState::new(1, 4);
-        let evaluated = evaluate(&game);
+        let evaluated = evaluate(&game, false);
         assert_eq!(evaluated[&game.zobrist_hash], -1);
     }
 
@@ -131,7 +132,7 @@ mod tests {
     #[test]
     fn test_4_4_game() {
         let game = GameState::new(4, 4);
-        let evaluated = evaluate(&game);
+        let evaluated = evaluate(&game, false);
         println!("Game evaluation: {}", evaluated[&game.zobrist_hash]);
         println!("Number of evaluated states: {}", evaluated.len());
 
@@ -148,7 +149,7 @@ mod tests {
         let stack_size = 32 * 1024 * 1024;
         let evaluated = thread::Builder::new()
             .stack_size(stack_size)
-            .spawn(move || evaluate(&game))
+            .spawn(move || evaluate(&game, true))
             .unwrap()
             .join()
             .unwrap();

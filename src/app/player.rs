@@ -1,18 +1,19 @@
 use crate::{
-    EVAL,
     app::hovered_move::use_hovered_move,
     core::{
         game::{GameState, Player},
         r#move::Move,
     },
+    search,
 };
-use std::rc::Rc;
-use yew::prelude::*;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use yew::{platform::spawn_local, prelude::*};
 
 #[derive(Properties, PartialEq)]
 pub struct PlayerPanelProps {
     pub player: Player,
     pub game_state: UseStateHandle<GameState>,
+    pub eval: Rc<RefCell<HashMap<u64, isize>>>,
 }
 
 fn eval_to_string(eval: Option<&isize>, player_id: u8) -> String {
@@ -30,6 +31,7 @@ fn eval_to_string(eval: Option<&isize>, player_id: u8) -> String {
 pub fn player_panel(props: &PlayerPanelProps) -> Html {
     let is_turn = props.game_state.player_to_move.id == props.player.id;
     let move_list_visible = use_state(|| false);
+    let eval = props.eval.clone();
 
     let game_state_handle = props.game_state.clone();
     let apply_move = Callback::from(move |m: Move| {
@@ -51,6 +53,28 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
         props.game_state.legal_moves()
     };
     let (hovered_move, set_hovered_move) = use_hovered_move();
+
+    // Calculate evaluations for the remainder of the game tree if we're running out of
+    // precomputed evaluations.
+    let should_eval = props.game_state.remaining_cubies.iter().sum::<u8>() <= 17;
+    {
+        let eval = props.eval.clone();
+        let game_state = props.game_state.clone();
+        use_effect_with(
+            should_eval,
+            move |should_eval| {
+                if *should_eval {
+                    let eval = eval.clone();
+                    let game_state = (*game_state).clone();
+                    spawn_local(async move {
+                        let new_evals = search::naive::evaluate(&game_state, false);
+                        eval.borrow_mut().extend(new_evals);
+                    });
+                }
+                || ()
+            },
+        );
+    }
 
     html! {
         <div class={classes!("player-panel", if is_turn { "active-turn" } else { "" })}>
@@ -80,8 +104,8 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                             { for moves.iter().map(|mv| {
                                 let mut new_state = (*props.game_state).clone();
                                 new_state.apply_move_normalize(mv.clone()).unwrap();
-                                // TODO: calculate missing evaluations
-                                let eval = EVAL.get(&new_state.zobrist_hash);
+                                let eval_map = eval.borrow();
+                                let eval = eval_map.get(&new_state.zobrist_hash);
                                 let eval = eval_to_string(eval, props.game_state.player_to_move.id);
                                 let is_hovered = hovered_move.0.as_ref().map_or(false, |h| h.as_ref() == mv);
                                 let mv = mv.clone();
