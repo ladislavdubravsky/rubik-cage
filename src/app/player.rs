@@ -4,6 +4,7 @@ use crate::{
         game::{GameState, Player},
         r#move::Move,
     },
+    search::naive::Evaluation,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{platform::spawn_local, prelude::*, use_effect_with};
@@ -13,16 +14,23 @@ use yew_agent::oneshot::use_oneshot_runner;
 pub struct PlayerPanelProps {
     pub player: Player,
     pub game_state: UseStateHandle<GameState>,
-    pub eval: Rc<RefCell<HashMap<u64, isize>>>,
+    pub eval: Rc<RefCell<HashMap<u64, Evaluation>>>,
 }
 
-fn eval_to_string(eval: Option<&isize>, player_id: u8) -> String {
-    match (eval, player_id) {
-        (Some(1), 0) => "Win".to_string(),
-        (Some(1), 1) => "Lose".to_string(),
-        (Some(-1), 0) => "Lose".to_string(),
-        (Some(-1), 1) => "Win".to_string(),
-        (Some(0), _) => "Draw".to_string(),
+fn eval_to_string(eval: Option<&Evaluation>, player_id: u8) -> String {
+    if eval.is_none() {
+        return "Calculating...".to_string();
+    }
+    let Evaluation {
+        score,
+        moves_to_wl: moves_to_win,
+    } = eval.unwrap();
+    match (score, player_id) {
+        (1, 0) => format!("Win in {} moves", moves_to_win),
+        (1, 1) => format!("Loss in {} moves", moves_to_win),
+        (-1, 0) => format!("Loss in {} moves", moves_to_win),
+        (-1, 1) => format!("Win in {} moves", moves_to_win),
+        (0, _) => "Draw".to_string(),
         _ => "Calculating...".to_string(),
     }
 }

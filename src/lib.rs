@@ -2,7 +2,7 @@ pub mod app;
 pub mod core;
 pub mod search;
 
-use crate::core::game::GameState;
+use crate::{core::game::GameState, search::naive::Evaluation};
 use app::{
     agent::EvaluationTask, cage::Cage, hovered_move::HoveredMoveProvider, player::PlayerPanel,
 };
@@ -20,7 +20,7 @@ pub fn app() -> Html {
     let eval = use_mut_ref(|| {
         const EVAL_BIN: &[u8] = include_bytes!("../assets/eval.bin");
         let config = bincode::config::standard();
-        let (map, _len): (HashMap<u64, isize>, usize) =
+        let (map, _len): (HashMap<u64, Evaluation>, usize) =
             bincode::decode_from_slice(EVAL_BIN, config).unwrap();
         map
     });

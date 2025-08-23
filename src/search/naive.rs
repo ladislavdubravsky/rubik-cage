@@ -1,28 +1,51 @@
 use crate::core::game::GameState;
+use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs::File;
 use std::io::{Read, Write};
 
-// TODO: track W/L/D in how many moves
-pub fn evaluate(game_state: &GameState, no_prune: bool) -> HashMap<u64, isize> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, Serialize, Deserialize)]
+pub struct Evaluation {
+    /// 1 = P1 win, -1 = P2 win, 0 = draw
+    pub score: isize,
+    /// If the position is drawn, zero. If the position is won (lost), upper bound on number of
+    /// moves to force a win (lower bound on number of moves to lose). If the search was done
+    /// without pruning the bounds are exact under optimal play.
+    pub moves_to_wl: usize,
+}
+
+impl std::fmt::Display for Evaluation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "score: {}, moves_to_wl: {}",
+            self.score, self.moves_to_wl
+        )
+    }
+}
+
+pub fn evaluate(game_state: &GameState, prune: bool) -> HashMap<u64, Evaluation> {
+    // visited tracks states seen in a *particular* game, to avoid searching cycles
     let mut visited = HashSet::new();
     let mut evaluated = HashMap::new();
     let mut game_state = game_state.clone();
     game_state.normalize();
 
-    minimax(&game_state, &mut visited, &mut evaluated, no_prune);
+    minimax(&game_state, &mut visited, &mut evaluated, prune);
     evaluated
 }
 
 pub fn minimax(
     game_state: &GameState,
     visited: &mut HashSet<u64>,
-    evaluated: &mut HashMap<u64, isize>,
-    no_prune: bool,
-) -> isize {
-    if let Some(&score) = evaluated.get(&game_state.zobrist_hash) {
-        return score;
+    evaluated: &mut HashMap<u64, Evaluation>,
+    prune: bool,
+) -> Evaluation {
+    // Check if we've either seen this position or win is on board
+    if let Some(&eval) = evaluated.get(&game_state.zobrist_hash) {
+        return eval;
     }
 
     visited.insert(game_state.zobrist_hash);
@@ -34,15 +57,29 @@ pub fn minimax(
             -1 // Second player win
         };
         visited.remove(&game_state.zobrist_hash);
-        evaluated.insert(game_state.zobrist_hash, score);
-        return score;
+        let eval = Evaluation {
+            score,
+            moves_to_wl: 0,
+        };
+        evaluated.insert(game_state.zobrist_hash, eval);
+        return eval;
     }
 
+    // If we didn't resolve the position yet, evaluate all children
+    // Each player can lose or better
     let mut best_score = if game_state.player_to_move.id == 0 {
         -1
     } else {
         1
     };
+
+    // If we're P1 and there are wins, track the fastest. If loss is the best we can do, track
+    // the slowest. If draw, it's just zero. For P2 vice versa.
+    let mut moves_to_wl_p1win_max = 0;
+    let mut moves_to_wl_p1win_min = usize::MAX;
+    let mut moves_to_wl_p1loss_max = 0;
+    let mut moves_to_wl_p1loss_min = usize::MAX;
+
     let mut no_children = true;
     let moves = game_state.legal_moves();
     for m in moves {
@@ -53,16 +90,25 @@ pub fn minimax(
         }
 
         no_children = false;
-        let score = minimax(&new_game_state, visited, evaluated, no_prune);
+        let eval = minimax(&new_game_state, visited, evaluated, prune);
+
+        if eval.score == 1 {
+            moves_to_wl_p1win_max = moves_to_wl_p1win_max.max(eval.moves_to_wl);
+            moves_to_wl_p1win_min = moves_to_wl_p1win_min.min(eval.moves_to_wl);
+        }
+        if eval.score == -1 {
+            moves_to_wl_p1loss_max = moves_to_wl_p1loss_max.max(eval.moves_to_wl);
+            moves_to_wl_p1loss_min = moves_to_wl_p1loss_min.min(eval.moves_to_wl);
+        }
 
         if game_state.player_to_move.id == 0 {
-            best_score = best_score.max(score);
-            if best_score == 1 && !no_prune {
+            best_score = best_score.max(eval.score);
+            if best_score == 1 && prune {
                 break;
             }
         } else {
-            best_score = best_score.min(score);
-            if best_score == -1 && !no_prune {
+            best_score = best_score.min(eval.score);
+            if best_score == -1 && prune {
                 break;
             }
         }
@@ -73,13 +119,30 @@ pub fn minimax(
         best_score = 0;
     }
 
-    visited.remove(&game_state.zobrist_hash);
-    evaluated.insert(game_state.zobrist_hash, best_score);
+    let moves_to_wl = match (best_score, game_state.player_to_move.id) {
+        // P1 wins and is to move: track fastest win
+        (1, 0) => moves_to_wl_p1win_min + 1,
+        // P1 wins, P2 to move: track slowest loss
+        (1, 1) => moves_to_wl_p1win_max + 1,
+        // P2 wins, P1 to move: track fastest win
+        (-1, 0) => moves_to_wl_p1loss_max + 1,
+        // P2 wins and is to move: track fastest win
+        (-1, 1) => moves_to_wl_p1loss_min + 1,
+        _ => 0,
+    };
 
-    best_score
+    let eval = Evaluation {
+        score: best_score,
+        moves_to_wl,
+    };
+
+    visited.remove(&game_state.zobrist_hash);
+    evaluated.insert(game_state.zobrist_hash, eval);
+
+    eval
 }
 
-pub fn save_eval(map: &HashMap<u64, isize>, path: &str) -> Result<(), Box<dyn Error>> {
+pub fn save_eval(map: &HashMap<u64, Evaluation>, path: &str) -> Result<(), Box<dyn Error>> {
     let config = bincode::config::standard();
     let encoded: Vec<u8> = bincode::encode_to_vec(map, config)?;
     let mut file = File::create(path)?;
@@ -88,12 +151,12 @@ pub fn save_eval(map: &HashMap<u64, isize>, path: &str) -> Result<(), Box<dyn Er
     Ok(())
 }
 
-pub fn load_eval(path: &str) -> Result<HashMap<u64, isize>, Box<dyn Error>> {
+pub fn load_eval(path: &str) -> Result<HashMap<u64, Evaluation>, Box<dyn Error>> {
     let mut file = File::open(path)?;
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer)?;
     let config = bincode::config::standard();
-    let (decoded_map, _len): (HashMap<u64, isize>, usize) =
+    let (decoded_map, _len): (HashMap<u64, Evaluation>, usize) =
         bincode::decode_from_slice(&buffer, config)?;
 
     Ok(decoded_map)
@@ -101,29 +164,40 @@ pub fn load_eval(path: &str) -> Result<HashMap<u64, isize>, Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use std::thread;
-
     use super::*;
+    use std::thread;
 
     #[test]
     fn test_1_1_game_draw() {
         let game = GameState::new(1, 1);
         let evaluated = evaluate(&game, false);
-        assert_eq!(evaluated[&game.zobrist_hash], 0);
+        assert_eq!(
+            evaluated[&game.zobrist_hash],
+            Evaluation {
+                score: 0,
+                moves_to_wl: 0
+            }
+        );
     }
 
     #[test]
     fn test_3_0_game_won_by_p1() {
         let game = GameState::new(3, 0);
         let evaluated = evaluate(&game, false);
-        assert_eq!(evaluated[&game.zobrist_hash], 1);
+        assert_eq!(
+            evaluated[&game.zobrist_hash],
+            Evaluation {
+                score: 1,
+                moves_to_wl: 5
+            }
+        );
     }
 
     #[test]
     fn test_1_4_game_won_by_p2() {
         let game = GameState::new(1, 4);
         let evaluated = evaluate(&game, false);
-        assert_eq!(evaluated[&game.zobrist_hash], -1);
+        assert_eq!(evaluated[&game.zobrist_hash].score, -1);
     }
 
     /// cargo test --release test_4_4_game -- --nocapture --ignored
