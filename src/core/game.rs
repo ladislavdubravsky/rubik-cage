@@ -5,15 +5,16 @@ use crate::core::{
     r#move::{Layer, Move, Rotation},
     zobrist,
 };
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct Player {
     pub color: Cubie,
     pub id: u8,
 }
 
 // TODO: enable more than 2 players and more than 1 color per player
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct GameState {
     pub cage: Cage,
     pub players: [Player; 2],
@@ -134,22 +135,18 @@ impl GameState {
         if reflection_happened {
             self.last_move = match self.last_move {
                 Some(Move::Flip) => Some(Move::Flip),
-                Some(Move::Drop { color, column }) => {
-                    Some(Move::Drop {
-                        color,
-                        column: (2 - column.0, column.1),
-                    })
-                }
-                Some(Move::RotateLayer { layer, rotation }) => {
-                    Some(Move::RotateLayer {
-                        layer,
-                        rotation: match rotation {
-                            Rotation::Clockwise => Rotation::CounterClockwise,
-                            Rotation::CounterClockwise => Rotation::Clockwise,
-                            Rotation::HalfTurn => Rotation::HalfTurn,
-                        },
-                    })
-                }
+                Some(Move::Drop { color, column }) => Some(Move::Drop {
+                    color,
+                    column: (2 - column.0, column.1),
+                }),
+                Some(Move::RotateLayer { layer, rotation }) => Some(Move::RotateLayer {
+                    layer,
+                    rotation: match rotation {
+                        Rotation::Clockwise => Rotation::CounterClockwise,
+                        Rotation::CounterClockwise => Rotation::Clockwise,
+                        Rotation::HalfTurn => Rotation::HalfTurn,
+                    },
+                }),
                 None => None,
             }
         }
@@ -168,7 +165,7 @@ impl GameState {
             Move::Flip => self.cage.flip(),
             Move::RotateLayer { layer, rotation } => self.cage.rotate_layer(layer, rotation),
         }
-        
+
         self.normalize();
 
         Ok(())

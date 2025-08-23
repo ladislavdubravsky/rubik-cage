@@ -1,13 +1,13 @@
 use crate::{
-    app::hovered_move::use_hovered_move,
+    app::{agent::EvaluationTask, hovered_move::use_hovered_move},
     core::{
         game::{GameState, Player},
         r#move::Move,
     },
-    search,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
-use yew::{platform::spawn_local, prelude::*};
+use yew::{platform::spawn_local, prelude::*, use_effect_with};
+use yew_agent::oneshot::use_oneshot_runner;
 
 #[derive(Properties, PartialEq)]
 pub struct PlayerPanelProps {
@@ -23,7 +23,7 @@ fn eval_to_string(eval: Option<&isize>, player_id: u8) -> String {
         (Some(-1), 0) => "Lose".to_string(),
         (Some(-1), 1) => "Win".to_string(),
         (Some(0), _) => "Draw".to_string(),
-        _ => "Unknown".to_string(),
+        _ => "Calculating...".to_string(),
     }
 }
 
@@ -54,27 +54,38 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
     };
     let (hovered_move, set_hovered_move) = use_hovered_move();
 
-    // Calculate evaluations for the remainder of the game tree if we're running out of
-    // precomputed evaluations.
-    let should_eval = props.game_state.remaining_cubies.iter().sum::<u8>() <= 17;
-    {
-        let eval = props.eval.clone();
-        let game_state = props.game_state.clone();
-        use_effect_with(
-            should_eval,
-            move |should_eval| {
-                if *should_eval {
-                    let eval = eval.clone();
-                    let game_state = (*game_state).clone();
-                    spawn_local(async move {
-                        let new_evals = search::naive::evaluate(&game_state, false);
-                        eval.borrow_mut().extend(new_evals);
-                    });
+    // The web worker evaluating missing (non-preloaded) game state evaluations runs with pruning.
+    // That avoids wasting time and calculating lots of positions we'll never need to see.
+    // But it also means we'll need to call it repeatedly for new unevaluated positions.
+    // We avoid the need to sync multiple workers by only allowing one to run at a time.
+    let agent_running = use_state(|| false);
+    let eval_task = use_oneshot_runner::<EvaluationTask>();
+    let game_state = props.game_state.clone();
+    use_effect_with(
+        (moves.clone(), eval.clone(), agent_running.clone()),
+        move |(moves, eval, agent_running)| {
+            if !*agent_running.clone() {
+                for mv in moves.iter() {
+                    let mut new_state = (*game_state).clone();
+                    new_state.apply_move_normalize(mv.clone()).unwrap();
+                    let hash = new_state.zobrist_hash;
+                    let eval_map = eval.borrow();
+                    if !eval_map.contains_key(&hash) {
+                        agent_running.set(true);
+                        let eval = eval.clone();
+                        let agent_running = agent_running.clone();
+                        spawn_local(async move {
+                            let new_evals = eval_task.run(new_state).await;
+                            eval.borrow_mut().extend(new_evals);
+                            agent_running.set(false);
+                        });
+                        break;
+                    }
                 }
-                || ()
-            },
-        );
-    }
+            }
+            || ()
+        },
+    );
 
     html! {
         <div class={classes!("player-panel", if is_turn { "active-turn" } else { "" })}>

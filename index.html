@@ -3,9 +3,13 @@
     <head>
         <meta charset="utf-8" />
         <title>Rubik's cage simulator</title>
+
         <link data-trunk rel="css" href="./styles/app.css" />
         <link data-trunk rel="css" href="./styles/player-panel.css" />
         <link data-trunk rel="css" href="./styles/cage.css" />
+
+        <link data-trunk rel="rust" href="Cargo.toml" data-bin="app" data-type="main" data-weak-refs />
+        <link data-trunk rel="rust" href="Cargo.toml" data-bin="worker" data-type="worker" data-weak-refs />
     </head>
     <body></body>
 </html>
