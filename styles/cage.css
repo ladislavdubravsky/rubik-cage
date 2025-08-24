@@ -1,7 +1,11 @@
 .cage {
     display: flex;
     flex-direction: column;
-    margin-top: 20px;
+    background: #272822;
+    border-radius: 14px;
+    box-shadow: 0 6px 24px rgba(39, 40, 34, 0.18);
+    padding: 24px 16px 16px 16px;
+    border: 2px solid #f92672;
 }
 
 .layer {
@@ -21,26 +25,29 @@
 }
 
 .slot {
-    background-color: var(--slot-color, #444);
+    background-color: var(--slot-color, #dbeafe);
     width: 60px;
     height: 60px;
-    border-radius: 4px;
-    box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.8);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(80, 80, 120, 0.10);
+    background-color: var(--slot-color, #49483e);
+    opacity: var(--slot-opacity, 1.0);
+    border: 2px solid #a6e22e;
+    box-shadow: 0 2px 12px rgba(39, 40, 34, 0.18);
 }
 
 .slot.center-slot {
-    opacity: 0.5;
+    opacity: 0.6;
 }
 
 .winning-line {
-    outline: 6px solid yellow;
-    outline-offset: -6px;
+    opacity: 1.0;
 }
 
 .game-control {
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
-    gap: 0.5em;
-    margin: 0.5em auto;
+    gap: 0.7em;
+    margin: 0.7em auto;
 }

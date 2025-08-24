@@ -33,7 +33,7 @@ pub fn app() -> Html {
                 <a href="https://github.com/ladislavdubravsky/rubik-cage" target="_blank" rel="noopener noreferrer">
                     { "Read more & source code" }
                 </a>
-                { "🦀" }
+                { " 🦀" }
             </p>
             <OneshotProvider<EvaluationTask> path="/worker.js">
                 <HoveredMoveProvider>

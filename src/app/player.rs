@@ -52,6 +52,8 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
         }
     });
 
+    let highlight_color = utils::slot_to_css(Some(props.player.color));
+
     let moves = if props.game_state.won().is_some() {
         Vec::new() // Don't show further moves if game is finished
     } else {
@@ -132,8 +134,8 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                                 let mv = mv.clone();
                                 html! {
                                     <li
-                                        class={if is_hovered { "highlighted" } else { "" }}
-                                        style={if is_hovered { format!("--highlight-color: {};", props.player.color) } else { String::new() }}
+                                        class={if is_hovered { "move-highlighted" } else { "" }}
+                                        style={if is_hovered { format!("--highlight-color: {};", highlight_color) } else { String::new() }}
                                         onclick={apply_move.reform(move |_| mv.clone())}
                                         onmouseenter={ {
                                             let set_hovered_move = set_hovered_move.clone();

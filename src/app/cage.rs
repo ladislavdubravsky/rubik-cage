@@ -1,5 +1,9 @@
 use crate::{
-    app::{game_control::GameControl, hovered_move::use_hovered_move, utils::apply_move_callback},
+    app::{
+        game_control::GameControl,
+        hovered_move::use_hovered_move,
+        utils::{apply_move_callback, slot_to_css},
+    },
     core::{
         game::GameState,
         r#move::{Layer, Move, Rotation},
@@ -33,6 +37,10 @@ pub fn cage(props: &CageProps) -> Html {
         game_frozen,
     );
 
+    let highlight_color = slot_to_css(Some(props.game_state.player_to_move.color));
+    let slot_opacity = if game_frozen { "0.3" } else { "1.0" };
+    let flip_disabled = game_frozen || props.game_state.last_move == Some(Move::Flip);
+
     html! {
         <div class="cage">
             { for [Layer::Up, Layer::Equator, Layer::Down].iter().enumerate().map(|(z, layer)| {
@@ -42,13 +50,16 @@ pub fn cage(props: &CageProps) -> Html {
                 let is_hovered_cw = hovered_move.0.as_ref().map_or(false, |h| h.as_ref() == &rotate_cw);
                 let is_hovered_ccw = hovered_move.0.as_ref().map_or(false, |h| h.as_ref() == &rotate_ccw);
 
+                let cw_disabled = game_frozen || props.game_state.last_move == Some(rotate_ccw);
+                let ccw_disabled = game_frozen || props.game_state.last_move == Some(rotate_cw);
+
                 html! {
                     <div class="layer">
                         <button
-                            class={classes!("control-button", if is_hovered_ccw { "highlighted" } else { "" })}
-                            style={if is_hovered_ccw { format!("--highlight-color: {};", player_to_move_color) } else { String::new() }}
+                            class={classes!("control-button", if is_hovered_ccw && !ccw_disabled { "highlighted" } else { "" })}
+                            style={if is_hovered_ccw { format!("--highlight-color: {};", highlight_color) } else { String::new() }}
                             onclick={apply_move.reform(move |_| rotate_ccw)}
-                            disabled={game_frozen || props.game_state.last_move == Some(rotate_cw)}
+                            disabled={ccw_disabled}
                             onmouseenter={{
                                 let set_hovered_move = set_hovered_move.clone();
                                 let rotate_ccw = Rc::new(rotate_ccw.clone());
@@ -63,7 +74,7 @@ pub fn cage(props: &CageProps) -> Html {
                         <div class="grid">
                             { for (0..9).map(|i| {
                                 let cubie = props.game_state.cage.grid[i / 3][i % 3][2 - z];
-                                let color = cubie.as_ref().map(|c| c.to_string()).unwrap_or("#444".into());
+                                let color = slot_to_css(cubie);
 
                                 // Cubie drops are implemented by clicking on top layer slots.
                                 let drop_move = Move::Drop {
@@ -91,7 +102,7 @@ pub fn cage(props: &CageProps) -> Html {
                                 html! {
                                     <div
                                         class={classes!(slot_classes)}
-                                        style={format!("--slot-color: {color}; --highlight-color: {player_to_move_color};")}
+                                        style={format!("--slot-color: {color}; --highlight-color: {highlight_color}; --slot-opacity: {slot_opacity};")}
                                         onclick={onclick}
                                         onmouseenter={
                                             if z == 0 && i != 4 && cubie.is_none() && !game_frozen {
@@ -116,10 +127,10 @@ pub fn cage(props: &CageProps) -> Html {
                         </div>
 
                         <button
-                            class={classes!("control-button", if is_hovered_cw { "highlighted" } else { "" })}
-                            style={if is_hovered_cw { format!("--highlight-color: {};", player_to_move_color) } else { String::new() }}
+                            class={classes!("control-button", if is_hovered_cw && !cw_disabled { "highlighted" } else { "" })}
+                            style={if is_hovered_cw { format!("--highlight-color: {};", highlight_color) } else { String::new() }}
                             onclick={apply_move.reform(move |_| rotate_cw)}
-                            disabled={game_frozen || props.game_state.last_move == Some(rotate_ccw)}
+                            disabled={cw_disabled}
                             onmouseenter={{
                                 let set_hovered_move = set_hovered_move.clone();
                                 let rotate_cw = Rc::new(rotate_cw.clone());
@@ -134,12 +145,11 @@ pub fn cage(props: &CageProps) -> Html {
                 }
             }) }
 
-            //let flip_disabled = game_frozen || props.game_state.last_move == Some(Move::Flip);
             <button
-                class={classes!("control-button", if is_hovered_flip { "highlighted" } else { "" })}
-                style={if is_hovered_flip { format!("--highlight-color: {};", player_to_move_color) } else { String::new() }}
+                class={classes!("control-button", if is_hovered_flip && !flip_disabled { "highlighted" } else { "" })}
+                style={if is_hovered_flip { format!("--highlight-color: {};", highlight_color) } else { String::new() }}
                 onclick={apply_move.reform(|_| Move::Flip)}
-                disabled={game_frozen || props.game_state.last_move == Some(Move::Flip)}
+                disabled={flip_disabled}
                 onmouseenter={{
                     let set_hovered_move = set_hovered_move.clone();
                     let flip = Rc::new(Move::Flip);

@@ -1,5 +1,5 @@
 use crate::{
-    core::{game::GameState, r#move::Move},
+    core::{cubie::Cubie, game::GameState, r#move::Move},
     search::naive::Evaluation,
 };
 use std::{cell::RefCell, collections::HashMap};
@@ -111,4 +111,12 @@ pub fn sort_moves_by_evaluation(
         }
     });
     moves_with_eval.into_iter().map(|(mv, _)| mv).collect()
+}
+
+pub fn slot_to_css(cubie: Option<Cubie>) -> &'static str {
+    match cubie {
+        Some(Cubie::Blue) => "var(--cubie-blue)",
+        Some(Cubie::Red) => "var(--cubie-red)",
+        _ => "var(--slot-empty)",
+    }
 }

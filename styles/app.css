@@ -1,45 +1,71 @@
+:root {
+    --cubie-blue: #66d9ef;
+    --cubie-red: #f92672;
+    --slot-empty: #49483e;
+}
+
 .app {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 100vh;
-    background-color: #f0f0f0;
+    background: linear-gradient(135deg, #272822 0%, #1e1f1c 100%);
+    font-family: 'Fira Mono', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'monospace';
+    color: #f8f8f2;
 }
 
 .game-area {
     display: flex;
-    align-items: center;
-    justify-content: center;
     align-items: flex-start;
-    gap: 30px;
-    padding: 40px;
-    align-items: stretch;
+    justify-content: center;
+    gap: 36px;
+    padding: 48px 32px;
+    background: #272822;
+    border-radius: 18px;
+    box-shadow: 0 6px 32px rgba(39, 40, 34, 0.18);
+    border: 2px solid #f92672;
 }
 
 .highlighted {
-    background: color-mix(in srgb, var(--highlight-color) 60%, transparent) !important;
+    background: color-mix(in srgb, var(--highlight-color) 60%, #fff) !important;
+    box-shadow: 0 0 0 4px #a6e22e;
 }
 
 h1, p {
     margin-bottom: 0.25em;
+    font-family: inherit;
+    color: #f8f8f2;
+    text-shadow: 0 2px 8px #1e1f1c;
+}
+
+a {
+    color: #66d9ef;
+    text-decoration: underline;
+    transition: color 0.2s;
 }
 
 .control-button {
-    padding: 0.5em 0.7em;
-    font-size: 1em;
-    border-radius: 6px;
-    border: 1px solid #888;
-    background: #222;
-    color: #fff;
+    padding: 0.6em 1.1em;
+    font-size: 1.08em;
+    border-radius: 8px;
+    border: none;
+    background: #b5dd65;
+    color: #272822;
+    font-weight: 700;
+    box-shadow: 0 4px 16px rgba(39, 40, 34, 0.18);
+    border: none;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background 0.2s, box-shadow 0.2s;
 }
 .control-button:disabled {
-    background: #444;
-    color: #aaa;
+    background: #49483e;
+    color: #75715e;
     cursor: not-allowed;
+    box-shadow: none;
+    border: 2px solid #75715e;
 }
 .control-button:hover:not(:disabled) {
-    background: #444;
+    background: #fd971f;
+    box-shadow: 0 8px 24px rgba(39, 40, 34, 0.22);
 }
