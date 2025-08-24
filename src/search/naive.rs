@@ -82,6 +82,24 @@ pub fn minimax(
 
     let mut no_children = true;
     let moves = game_state.legal_moves();
+
+    // if win in one move, prune everything else
+    if prune {
+        for m in &moves {
+            let mut new_game_state = game_state.clone();
+            new_game_state.apply_move_normalize(*m).unwrap();
+            if new_game_state.won().is_some() {
+                let eval = Evaluation {
+                    score: if game_state.player_to_move.id == 0 { 1 } else { -1 },
+                    moves_to_wl: 1,
+                };
+                visited.remove(&game_state.zobrist_hash);
+                evaluated.insert(game_state.zobrist_hash, eval);
+                return eval;
+            }
+        }
+    }
+
     for m in moves {
         let mut new_game_state = game_state.clone();
         new_game_state.apply_move_normalize(m).unwrap();
@@ -165,7 +183,6 @@ pub fn load_eval(path: &str) -> Result<HashMap<u64, Evaluation>, Box<dyn Error>>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
 
     #[test]
     fn test_1_1_game_draw() {
@@ -196,7 +213,7 @@ mod tests {
     #[test]
     fn test_1_4_game_won_by_p2() {
         let game = GameState::new(1, 4);
-        let evaluated = evaluate(&game, false);
+        let evaluated = evaluate(&game, true);
         assert_eq!(evaluated[&game.zobrist_hash].score, -1);
     }
 
@@ -206,30 +223,14 @@ mod tests {
     #[test]
     fn test_4_4_game() {
         let game = GameState::new(4, 4);
-        let evaluated = evaluate(&game, false);
+        let evaluated = evaluate(&game, true);
         println!("Game evaluation: {}", evaluated[&game.zobrist_hash]);
         println!("Number of evaluated states: {}", evaluated.len());
 
         save_eval(&evaluated, "eval.bin").unwrap();
         let loaded = load_eval("eval.bin").unwrap();
         assert_eq!(loaded, evaluated);
-    }
 
-    /// cargo test --release test_12_12_game -- --nocapture --ignored
-    #[ignore]
-    #[test]
-    fn test_12_12_game() {
-        let game = GameState::new(12, 12);
-        let stack_size = 32 * 1024 * 1024;
-        let evaluated = thread::Builder::new()
-            .stack_size(stack_size)
-            .spawn(move || evaluate(&game, true))
-            .unwrap()
-            .join()
-            .unwrap();
-        println!("Game evaluation: {}", evaluated[&game.zobrist_hash]);
-        println!("Number of evaluated states: {}", evaluated.len());
-
-        save_eval(&evaluated, "eval.bin").unwrap();
+        std::fs::remove_file("eval.bin").unwrap();
     }
 }
