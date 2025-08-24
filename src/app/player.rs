@@ -2,7 +2,7 @@ use crate::{
     app::{
         agent::{EvaluationTask, EvaluationTaskSpec},
         hovered_move::use_hovered_move,
-        utils::apply_move_callback,
+        utils::{self, apply_move_callback},
     },
     core::game::{GameState, Player},
     search::naive::{Evaluation, SearchMode},
@@ -55,7 +55,7 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
     let moves = if props.game_state.won().is_some() {
         Vec::new() // Don't show further moves if game is finished
     } else {
-        props.game_state.legal_moves()
+        utils::sort_moves_by_evaluation(props.game_state.legal_moves(), &props.game_state, &eval)
     };
     let (hovered_move, set_hovered_move) = use_hovered_move();
 
@@ -122,7 +122,6 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                 if *move_list_visible && is_turn {
                     html! {
                         <ul class="move-list">
-                            // TODO: sort moves by evaluation
                             { for moves.iter().map(|mv| {
                                 let mut new_state = (*props.game_state).clone();
                                 new_state.apply_move_normalize(mv.clone()).unwrap();
