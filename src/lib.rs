@@ -35,12 +35,14 @@ pub fn app() -> Html {
                         <PlayerPanel
                             game_state={game_state.clone()}
                             player={game_state.players[0]}
+                            history={history.clone()}
                             eval={eval.clone()}
                         />
                         <Cage game_state={game_state.clone()} history={history.clone()} />
                         <PlayerPanel
                             game_state={game_state.clone()}
                             player={game_state.players[1]}
+                            history={history.clone()}
                             eval={eval.clone()}
                         />
                     </div>

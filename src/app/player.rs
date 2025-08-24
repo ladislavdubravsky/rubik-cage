@@ -1,9 +1,6 @@
 use crate::{
-    app::{agent::EvaluationTask, hovered_move::use_hovered_move},
-    core::{
-        game::{GameState, Player},
-        r#move::Move,
-    },
+    app::{agent::EvaluationTask, hovered_move::use_hovered_move, utils::apply_move_callback},
+    core::game::{GameState, Player},
     search::naive::Evaluation,
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -14,6 +11,7 @@ use yew_agent::oneshot::use_oneshot_runner;
 pub struct PlayerPanelProps {
     pub player: Player,
     pub game_state: UseStateHandle<GameState>,
+    pub history: UseStateHandle<Vec<GameState>>,
     pub eval: Rc<RefCell<HashMap<u64, Evaluation>>>,
 }
 
@@ -26,10 +24,10 @@ fn eval_to_string(eval: Option<&Evaluation>, player_id: u8) -> String {
         moves_to_wl: moves_to_win,
     } = eval.unwrap();
     match (score, player_id) {
-        (1, 0) => format!("Win in {} moves", moves_to_win),
-        (1, 1) => format!("Loss in {} moves", moves_to_win),
-        (-1, 0) => format!("Loss in {} moves", moves_to_win),
-        (-1, 1) => format!("Win in {} moves", moves_to_win),
+        (1, 0) => format!("Win in {}", moves_to_win),
+        (1, 1) => format!("Loss in {}", moves_to_win),
+        (-1, 0) => format!("Loss in {}", moves_to_win),
+        (-1, 1) => format!("Win in {}", moves_to_win),
         (0, _) => "Draw".to_string(),
         _ => "Calculating...".to_string(),
     }
@@ -41,13 +39,8 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
     let move_list_visible = use_state(|| false);
     let eval = props.eval.clone();
 
-    let game_state_handle = props.game_state.clone();
-    let apply_move = Callback::from(move |m: Move| {
-        let mut new_state = (*game_state_handle).clone();
-        if new_state.apply_move(m).is_ok() {
-            game_state_handle.set(new_state);
-        }
-    });
+    let is_won = props.game_state.won().is_some();
+    let apply_move = apply_move_callback(props.game_state.clone(), props.history.clone(), is_won);
 
     let cubies = (0..props.game_state.remaining_cubies[props.player.id as usize]).map(|i| {
         html! {

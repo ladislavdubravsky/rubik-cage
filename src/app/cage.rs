@@ -1,6 +1,10 @@
-use crate::{app::hovered_move::use_hovered_move, core::{
-    game::GameState, r#move::{Layer, Move, Rotation}
-}};
+use crate::{
+    app::{hovered_move::use_hovered_move, utils::apply_move_callback},
+    core::{
+        game::GameState,
+        r#move::{Layer, Move, Rotation},
+    },
+};
 use std::rc::Rc;
 use yew::prelude::*;
 
@@ -16,26 +20,18 @@ pub fn cage(props: &CageProps) -> Html {
     let game_state_handle = props.game_state.clone();
     let history_handle = props.history.clone();
     let (hovered_move, set_hovered_move) = use_hovered_move();
-    let is_hovered_flip = hovered_move.0.as_ref().map_or(false, |h| h.as_ref() == &Move::Flip);
+    let is_hovered_flip = hovered_move
+        .0
+        .as_ref()
+        .map_or(false, |h| h.as_ref() == &Move::Flip);
 
     let won = props.game_state.won();
     let game_frozen = won.is_some();
-
-    let apply_move = {
-        let game_state_handle = game_state_handle.clone();
-        let history_handle = history_handle.clone();
-        Callback::from(move |m: Move| {
-            if !game_frozen {
-                let mut new_state = (*game_state_handle).clone();
-                if new_state.apply_move(m).is_ok() {
-                    let mut new_history = (*history_handle).clone();
-                    new_history.push((*game_state_handle).clone());
-                    history_handle.set(new_history);
-                    game_state_handle.set(new_state);
-                }
-            }
-        })
-    };
+    let apply_move = apply_move_callback(
+        game_state_handle.clone(),
+        history_handle.clone(),
+        game_frozen,
+    );
 
     html! {
         <div class="cage">
@@ -70,20 +66,16 @@ pub fn cage(props: &CageProps) -> Html {
                                 let color = cubie.as_ref().map(|c| c.to_string()).unwrap_or("#444".into());
 
                                 // Cubie drops are implemented by clicking on top layer slots.
-                                let onclick = if z == 0 && i != 4 && cubie.is_none() && !game_frozen {
-                                    let color = player_to_move_color.clone();
-                                    Some(apply_move.reform(move |_| Move::Drop {
-                                        color,
-                                        column: (i / 3, i % 3),
-                                    }))
-                                } else {
-                                    None
-                                };
-
                                 let drop_move = Move::Drop {
                                     color: player_to_move_color.clone(),
                                     column: (i / 3, i % 3),
                                 };
+                                let onclick = if z == 0 && i != 4 && cubie.is_none() && !game_frozen {
+                                    Some(apply_move.reform(move |_| drop_move.clone()))
+                                } else {
+                                    None
+                                };
+
                                 let is_hovered_drop = hovered_move.0.as_ref().map_or(false, |h| h.as_ref() == &drop_move);
 
                                 let mut slot_classes = vec!["slot".to_string()];
