@@ -122,6 +122,7 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                 if *move_list_visible && is_turn {
                     html! {
                         <ul class="move-list">
+                            // TODO: sort moves by evaluation
                             { for moves.iter().map(|mv| {
                                 let mut new_state = (*props.game_state).clone();
                                 new_state.apply_move_normalize(mv.clone()).unwrap();
