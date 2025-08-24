@@ -10,10 +10,10 @@ use std::io::{Read, Write};
 pub struct Evaluation {
     /// 1 = P1 win, -1 = P2 win, 0 = draw
     pub score: isize,
-    /// If the position is drawn, zero. If the position is won (lost), upper bound on number of
+    /// If the position is drawn, -1. If the position is won (lost), upper bound on number of
     /// moves to force a win (lower bound on number of moves to lose). If the search was done
     /// without pruning the bounds are exact under optimal play.
-    pub moves_to_wl: usize,
+    pub moves_to_wl: isize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,18 +80,18 @@ pub fn minimax(
 
     // If we didn't resolve the position yet, evaluate all children
     // Each player can lose or better
-    let mut best_score = if game_state.player_to_move.id == 0 {
-        -1
-    } else {
-        1
+    let mut best_score = match game_state.player_to_move.id {
+        0 => -1,
+        1 => 1,
+        _ => unreachable!(),
     };
 
     // If we're P1 and there are wins, track the fastest. If loss is the best we can do, track
-    // the slowest. If draw, it's just zero. For P2 vice versa.
+    // the slowest. If draw mark as -1. For P2 vice versa.
     let mut moves_to_wl_p1win_max = 0;
-    let mut moves_to_wl_p1win_min = usize::MAX;
+    let mut moves_to_wl_p1win_min = isize::MAX;
     let mut moves_to_wl_p1loss_max = 0;
-    let mut moves_to_wl_p1loss_min = usize::MAX;
+    let mut moves_to_wl_p1loss_min = isize::MAX;
 
     let mut no_children = true;
     let moves = game_state.legal_moves();
@@ -101,18 +101,20 @@ pub fn minimax(
         for m in &moves {
             let mut new_game_state = game_state.clone();
             new_game_state.apply_move_normalize(*m).unwrap();
-            if new_game_state.won().is_some() {
-                let eval = Evaluation {
-                    score: if game_state.player_to_move.id == 0 {
-                        1
-                    } else {
-                        -1
-                    },
-                    moves_to_wl: 1,
-                };
-                visited.remove(&game_state.zobrist_hash);
-                evaluated.insert(game_state.zobrist_hash, eval);
-                return eval;
+            if let Some((winner, _)) = new_game_state.won() {
+                if game_state.player_to_move.id == winner.id {
+                    let eval = Evaluation {
+                        score: match game_state.player_to_move.id {
+                            0 => 1,
+                            1 => -1,
+                            _ => unreachable!(),
+                        },
+                        moves_to_wl: 1,
+                    };
+                    visited.remove(&game_state.zobrist_hash);
+                    evaluated.insert(game_state.zobrist_hash, eval);
+                    return eval;
+                }
             }
         }
     }
@@ -154,7 +156,7 @@ pub fn minimax(
         best_score = 0;
     }
 
-    let moves_to_wl = match (best_score, game_state.player_to_move.id) {
+    let moves_to_wl: isize = match (best_score, game_state.player_to_move.id) {
         // P1 wins and is to move: track fastest win
         (1, 0) => moves_to_wl_p1win_min + 1,
         // P1 wins, P2 to move: track slowest loss
@@ -163,7 +165,8 @@ pub fn minimax(
         (-1, 0) => moves_to_wl_p1loss_max + 1,
         // P2 wins and is to move: track fastest win
         (-1, 1) => moves_to_wl_p1loss_min + 1,
-        _ => 0,
+        // Draw
+        _ => -1, 
     };
 
     let eval = Evaluation {
