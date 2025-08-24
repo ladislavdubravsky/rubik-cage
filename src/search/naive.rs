@@ -16,6 +16,19 @@ pub struct Evaluation {
     pub moves_to_wl: usize,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SearchMode {
+    /// Search all reachable positions. For instance, this will go past one move wins (as if the
+    /// player missed the opportunity). It will however not continue playing an already won game.
+    Full,
+    /// If a win is seen, this keeps searching to make sure there is not a faster win. Unlike the
+    /// previous option, it will not go past one move wins, as no shorter ones can be found there.
+    OptimalWL,
+    /// This will search until we know the position evaluation with certainty, but doesn't try
+    /// to find optimal moves to W/L.
+    Pruned,
+}
+
 impl std::fmt::Display for Evaluation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -26,14 +39,14 @@ impl std::fmt::Display for Evaluation {
     }
 }
 
-pub fn evaluate(game_state: &GameState, prune: bool) -> HashMap<u64, Evaluation> {
+pub fn evaluate(game_state: &GameState, mode: SearchMode) -> HashMap<u64, Evaluation> {
     // visited tracks states seen in a *particular* game, to avoid searching cycles
     let mut visited = HashSet::new();
     let mut evaluated = HashMap::new();
     let mut game_state = game_state.clone();
     game_state.normalize();
 
-    minimax(&game_state, &mut visited, &mut evaluated, prune);
+    minimax(&game_state, &mut visited, &mut evaluated, &mode);
     evaluated
 }
 
@@ -41,7 +54,7 @@ pub fn minimax(
     game_state: &GameState,
     visited: &mut HashSet<u64>,
     evaluated: &mut HashMap<u64, Evaluation>,
-    prune: bool,
+    mode: &SearchMode,
 ) -> Evaluation {
     // Check if we've either seen this position or win is on board
     if let Some(&eval) = evaluated.get(&game_state.zobrist_hash) {
@@ -83,14 +96,18 @@ pub fn minimax(
     let mut no_children = true;
     let moves = game_state.legal_moves();
 
-    // if win in one move, prune everything else
-    if prune {
+    // if we see a 1 move win, prune everything else unless in exhaustive search mode
+    if mode != &SearchMode::Full {
         for m in &moves {
             let mut new_game_state = game_state.clone();
             new_game_state.apply_move_normalize(*m).unwrap();
             if new_game_state.won().is_some() {
                 let eval = Evaluation {
-                    score: if game_state.player_to_move.id == 0 { 1 } else { -1 },
+                    score: if game_state.player_to_move.id == 0 {
+                        1
+                    } else {
+                        -1
+                    },
                     moves_to_wl: 1,
                 };
                 visited.remove(&game_state.zobrist_hash);
@@ -108,7 +125,7 @@ pub fn minimax(
         }
 
         no_children = false;
-        let eval = minimax(&new_game_state, visited, evaluated, prune);
+        let eval = minimax(&new_game_state, visited, evaluated, mode);
 
         if eval.score == 1 {
             moves_to_wl_p1win_max = moves_to_wl_p1win_max.max(eval.moves_to_wl);
@@ -121,12 +138,12 @@ pub fn minimax(
 
         if game_state.player_to_move.id == 0 {
             best_score = best_score.max(eval.score);
-            if best_score == 1 && prune {
+            if best_score == 1 && mode == &SearchMode::Pruned {
                 break;
             }
         } else {
             best_score = best_score.min(eval.score);
-            if best_score == -1 && prune {
+            if best_score == -1 && mode == &SearchMode::Pruned {
                 break;
             }
         }
@@ -187,7 +204,7 @@ mod tests {
     #[test]
     fn test_1_1_game_draw() {
         let game = GameState::new(1, 1);
-        let evaluated = evaluate(&game, false);
+        let evaluated = evaluate(&game, SearchMode::Full);
         assert_eq!(
             evaluated[&game.zobrist_hash],
             Evaluation {
@@ -200,7 +217,7 @@ mod tests {
     #[test]
     fn test_3_0_game_won_by_p1() {
         let game = GameState::new(3, 0);
-        let evaluated = evaluate(&game, false);
+        let evaluated = evaluate(&game, SearchMode::Full);
         assert_eq!(
             evaluated[&game.zobrist_hash],
             Evaluation {
@@ -213,7 +230,7 @@ mod tests {
     #[test]
     fn test_1_4_game_won_by_p2() {
         let game = GameState::new(1, 4);
-        let evaluated = evaluate(&game, true);
+        let evaluated = evaluate(&game, SearchMode::Pruned);
         assert_eq!(evaluated[&game.zobrist_hash].score, -1);
     }
 
@@ -223,7 +240,7 @@ mod tests {
     #[test]
     fn test_4_4_game() {
         let game = GameState::new(4, 4);
-        let evaluated = evaluate(&game, true);
+        let evaluated = evaluate(&game, SearchMode::Pruned);
         println!("Game evaluation: {}", evaluated[&game.zobrist_hash]);
         println!("Number of evaluated states: {}", evaluated.len());
 

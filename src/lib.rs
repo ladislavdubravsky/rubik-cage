@@ -15,7 +15,7 @@ pub fn app() -> Html {
     let game_state = use_state(|| GameState::new(12, 12));
     let history = use_state(|| Vec::new());
 
-    // Load precomputed evaluations for positions at shallow depth (up to 8 cubies placed).
+    // Load precomputed evaluations for hardest-to-compute positions.
     // Evaluations for further positions will be calculated on the fly when needed.
     let eval = use_mut_ref(|| {
         const EVAL_BIN: &[u8] = include_bytes!("../assets/eval.bin");

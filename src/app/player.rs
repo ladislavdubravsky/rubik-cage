@@ -1,7 +1,11 @@
 use crate::{
-    app::{agent::EvaluationTask, hovered_move::use_hovered_move, utils::apply_move_callback},
+    app::{
+        agent::{EvaluationTask, EvaluationTaskSpec},
+        hovered_move::use_hovered_move,
+        utils::apply_move_callback,
+    },
     core::game::{GameState, Player},
-    search::naive::Evaluation,
+    search::naive::{Evaluation, SearchMode},
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{platform::spawn_local, prelude::*, use_effect_with};
@@ -29,7 +33,7 @@ fn eval_to_string(eval: Option<&Evaluation>, player_id: u8) -> String {
         (-1, 0) => format!("Loss in {}", moves_to_win),
         (-1, 1) => format!("Win in {}", moves_to_win),
         (0, _) => "Draw".to_string(),
-        _ => "Calculating...".to_string(),
+        ev => format!("Unexpected evaluation: {:?}", ev),
     }
 }
 
@@ -76,7 +80,12 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                         let eval = eval.clone();
                         let agent_running = agent_running.clone();
                         spawn_local(async move {
-                            let new_evals = eval_task.run(new_state).await;
+                            let spec = EvaluationTaskSpec {
+                                state: new_state,
+                                // this is fast by now, no need to give user choice to prune
+                                search_mode: SearchMode::OptimalWL,
+                            };
+                            let new_evals = eval_task.run(spec).await;
                             eval.borrow_mut().extend(new_evals);
                             agent_running.set(false);
                         });
