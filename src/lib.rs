@@ -28,7 +28,13 @@ pub fn app() -> Html {
     html! {
         <div class="app">
             <h1>{ "Rubik's Cage Simulator" }</h1>
-            <p>{ "Place cubies, rotate layers, and try to get three in a line!" }</p>
+            <p>
+                { "Place cubies, rotate layers, and try to get three in a line! " }
+                <a href="https://github.com/ladislavdubravsky/rubik-cage" target="_blank" rel="noopener noreferrer">
+                    { "Read more & source code" }
+                </a>
+                { "🦀" }
+            </p>
             <OneshotProvider<EvaluationTask> path="/worker.js">
                 <HoveredMoveProvider>
                     <div class="game-area">

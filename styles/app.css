@@ -24,3 +24,22 @@
 h1, p {
     margin-bottom: 0.25em;
 }
+
+.control-button {
+    padding: 0.5em 0.7em;
+    font-size: 1em;
+    border-radius: 6px;
+    border: 1px solid #888;
+    background: #222;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.control-button:disabled {
+    background: #444;
+    color: #aaa;
+    cursor: not-allowed;
+}
+.control-button:hover:not(:disabled) {
+    background: #444;
+}

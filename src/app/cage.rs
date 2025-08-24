@@ -1,5 +1,5 @@
 use crate::{
-    app::{hovered_move::use_hovered_move, utils::apply_move_callback},
+    app::{game_control::GameControl, hovered_move::use_hovered_move, utils::apply_move_callback},
     core::{
         game::GameState,
         r#move::{Layer, Move, Rotation},
@@ -45,7 +45,7 @@ pub fn cage(props: &CageProps) -> Html {
                 html! {
                     <div class="layer">
                         <button
-                            class={classes!("rotate-button", if is_hovered_ccw { "highlighted" } else { "" })}
+                            class={classes!("control-button", if is_hovered_ccw { "highlighted" } else { "" })}
                             style={if is_hovered_ccw { format!("--highlight-color: {};", player_to_move_color) } else { String::new() }}
                             onclick={apply_move.reform(move |_| rotate_ccw)}
                             disabled={game_frozen || props.game_state.last_move == Some(rotate_cw)}
@@ -116,7 +116,7 @@ pub fn cage(props: &CageProps) -> Html {
                         </div>
 
                         <button
-                            class={classes!("rotate-button", if is_hovered_cw { "highlighted" } else { "" })}
+                            class={classes!("control-button", if is_hovered_cw { "highlighted" } else { "" })}
                             style={if is_hovered_cw { format!("--highlight-color: {};", player_to_move_color) } else { String::new() }}
                             onclick={apply_move.reform(move |_| rotate_cw)}
                             disabled={game_frozen || props.game_state.last_move == Some(rotate_ccw)}
@@ -134,8 +134,9 @@ pub fn cage(props: &CageProps) -> Html {
                 }
             }) }
 
+            //let flip_disabled = game_frozen || props.game_state.last_move == Some(Move::Flip);
             <button
-                class={if is_hovered_flip { "highlighted" } else { "" }}
+                class={classes!("control-button", if is_hovered_flip { "highlighted" } else { "" })}
                 style={if is_hovered_flip { format!("--highlight-color: {};", player_to_move_color) } else { String::new() }}
                 onclick={apply_move.reform(|_| Move::Flip)}
                 disabled={game_frozen || props.game_state.last_move == Some(Move::Flip)}
@@ -150,41 +151,15 @@ pub fn cage(props: &CageProps) -> Html {
                 }}
             >{ "Flip" }</button>
 
-            <h2 style="text-align: center;">
-                {
-                    if let Some((winner, _)) = won {
-                        format!("{} won!", winner.color)
-                    } else {
-                        "".to_string()
-                    }
+            {
+                if let Some((winner, _)) = won {
+                    html! { <h2 style="text-align: center;">{ format!("{} won!", winner.color) }</h2> }
+                } else {
+                    html! {}
                 }
-            </h2>
+            }
 
-            <button
-                onclick={{
-                    let game_state_handle = game_state_handle.clone();
-                    let history_handle = history_handle.clone();
-                    Callback::from(move |_| {
-                        let mut new_history = (*history_handle).clone();
-                        if let Some(prev_state) = new_history.pop() {
-                            game_state_handle.set(prev_state);
-                            history_handle.set(new_history);
-                        }
-                    })
-                }}
-                disabled={(*history_handle).is_empty()}
-            >{ "Undo last move" }</button>
-
-            <button
-                onclick={{
-                    let game_state_handle = game_state_handle.clone();
-                    let history_handle = history_handle.clone();
-                    Callback::from(move |_| {
-                        game_state_handle.set(GameState::new(12, 12));
-                        history_handle.set(Vec::new());
-                    })
-                }}
-            >{ "Restart the game" }</button>
+            <GameControl game_state={props.game_state.clone()} history={props.history.clone()} />
 
         </div>
     }
