@@ -97,11 +97,15 @@ pub fn minimax(
     let moves = game_state.legal_moves();
 
     // if we see a 1 move win, prune everything else unless in exhaustive search mode
+    // TODO: depth-limited lookahead search?
     if mode != &SearchMode::Full {
         for m in &moves {
             let mut new_game_state = game_state.clone();
             new_game_state.apply_move_normalize(*m).unwrap();
             if let Some((winner, _)) = new_game_state.won() {
+                // this will not recurse since the game is won
+                minimax(&new_game_state, visited, evaluated, mode);
+                // now prune if the winning player
                 if game_state.player_to_move.id == winner.id {
                     let eval = Evaluation {
                         score: match game_state.player_to_move.id {
