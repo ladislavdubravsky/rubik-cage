@@ -21,8 +21,8 @@ pub enum SearchMode {
     /// Search all reachable positions. For instance, this will go past one move wins (as if the
     /// player missed the opportunity). It will however not continue playing an already won game.
     Full,
-    /// If a win is seen, this keeps searching to make sure there is not a faster win. Unlike the
-    /// previous option, it will not go past one move wins, as no shorter ones can be found there.
+    /// If a win is seen, this keeps searching to make sure there is not a faster win. Branches
+    /// that cannot improve on the best win found so far are pruned.
     OptimalWL,
     /// This will search until we know the position evaluation with certainty, but doesn't try
     /// to find optimal moves to W/L.
@@ -46,7 +46,8 @@ pub fn evaluate(game_state: &GameState, mode: SearchMode) -> HashMap<u64, Evalua
     let mut game_state = game_state.clone();
     game_state.normalize();
 
-    minimax(&game_state, &mut visited, &mut evaluated, &mode);
+    // Start with no best win depth
+    minimax(&game_state, &mut visited, &mut evaluated, &mode, 0, None);
     evaluated
 }
 
@@ -55,10 +56,21 @@ pub fn minimax(
     visited: &mut HashSet<u64>,
     evaluated: &mut HashMap<u64, Evaluation>,
     mode: &SearchMode,
-) -> Evaluation {
-    // Check if we've either seen this position or win is on board
+    current_depth: usize,
+    best_win_depth: Option<usize>,
+) -> Option<Evaluation> {
+    // 1. Check if we've either seen this position, win is on board or we can prune
     if let Some(&eval) = evaluated.get(&game_state.zobrist_hash) {
-        return eval;
+        return Some(eval);
+    }
+
+    // If we've seen a shorter win somewhere upwards in the tree, prune
+    if mode != &SearchMode::Full {
+        if let Some(win_depth) = best_win_depth {
+            if current_depth >= win_depth {
+                return None;
+            }
+        }
     }
 
     visited.insert(game_state.zobrist_hash);
@@ -75,10 +87,10 @@ pub fn minimax(
             moves_to_wl: 0,
         };
         evaluated.insert(game_state.zobrist_hash, eval);
-        return eval;
+        return Some(eval);
     }
 
-    // If we didn't resolve the position yet, evaluate all children
+    // 2. If we didn't resolve the position yet, evaluate all children
     // Each player can lose or better
     let mut best_score = match game_state.player_to_move.id {
         0 => -1,
@@ -96,15 +108,21 @@ pub fn minimax(
     let mut no_children = true;
     let moves = game_state.legal_moves();
 
-    // if we see a 1 move win, prune everything else unless in exhaustive search mode
-    // TODO: depth-limited lookahead search?
+    // If we see a 1 move win, prune everything else unless in exhaustive search mode
     if mode != &SearchMode::Full {
         for m in &moves {
             let mut new_game_state = game_state.clone();
             new_game_state.apply_move_normalize(*m).unwrap();
             if let Some((winner, _)) = new_game_state.won() {
                 // this will not recurse since the game is won
-                minimax(&new_game_state, visited, evaluated, mode);
+                minimax(
+                    &new_game_state,
+                    visited,
+                    evaluated,
+                    mode,
+                    current_depth + 1,
+                    best_win_depth,
+                );
                 // now prune if the winning player
                 if game_state.player_to_move.id == winner.id {
                     let eval = Evaluation {
@@ -117,12 +135,13 @@ pub fn minimax(
                     };
                     visited.remove(&game_state.zobrist_hash);
                     evaluated.insert(game_state.zobrist_hash, eval);
-                    return eval;
+                    return Some(eval);
                 }
             }
         }
     }
 
+    let mut local_best_win_depth = best_win_depth;
     for m in moves {
         let mut new_game_state = game_state.clone();
         new_game_state.apply_move_normalize(m).unwrap();
@@ -131,12 +150,31 @@ pub fn minimax(
         }
 
         no_children = false;
-        let eval = minimax(&new_game_state, visited, evaluated, mode);
+        let eval = minimax(
+            &new_game_state,
+            visited,
+            evaluated,
+            mode,
+            current_depth + 1,
+            local_best_win_depth,
+        );
+        if eval.is_none() {
+            // Pruned
+            continue;
+        }
+        let eval = eval.unwrap();
 
+        // Track fastest win
         if eval.score == 1 {
             moves_to_wl_p1win_max = moves_to_wl_p1win_max.max(eval.moves_to_wl);
             moves_to_wl_p1win_min = moves_to_wl_p1win_min.min(eval.moves_to_wl);
+            // Update local_best_win_depth if we found a faster win
+            let win_depth = current_depth + 1 + eval.moves_to_wl as usize;
+            if local_best_win_depth.is_none() || win_depth < local_best_win_depth.unwrap() {
+                local_best_win_depth = Some(win_depth);
+            }
         }
+
         if eval.score == -1 {
             moves_to_wl_p1loss_max = moves_to_wl_p1loss_max.max(eval.moves_to_wl);
             moves_to_wl_p1loss_min = moves_to_wl_p1loss_min.min(eval.moves_to_wl);
@@ -165,12 +203,12 @@ pub fn minimax(
         (1, 0) => moves_to_wl_p1win_min + 1,
         // P1 wins, P2 to move: track slowest loss
         (1, 1) => moves_to_wl_p1win_max + 1,
-        // P2 wins, P1 to move: track fastest win
+        // P2 wins, P1 to move: track slowest loss
         (-1, 0) => moves_to_wl_p1loss_max + 1,
         // P2 wins and is to move: track fastest win
         (-1, 1) => moves_to_wl_p1loss_min + 1,
         // Draw
-        _ => -1, 
+        _ => -1,
     };
 
     let eval = Evaluation {
@@ -181,7 +219,7 @@ pub fn minimax(
     visited.remove(&game_state.zobrist_hash);
     evaluated.insert(game_state.zobrist_hash, eval);
 
-    eval
+    Some(eval)
 }
 
 pub fn save_eval(map: &HashMap<u64, Evaluation>, path: &str) -> Result<(), Box<dyn Error>> {
@@ -215,7 +253,7 @@ mod tests {
         assert_eq!(
             evaluated[&game.zobrist_hash],
             Evaluation {
-                score: 0,
+                score: -1,
                 moves_to_wl: 0
             }
         );
