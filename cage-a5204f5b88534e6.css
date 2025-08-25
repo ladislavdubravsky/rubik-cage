@@ -1,0 +1,53 @@
+.cage {
+    display: flex;
+    flex-direction: column;
+    background: #272822;
+    border-radius: 14px;
+    box-shadow: 0 6px 24px rgba(39, 40, 34, 0.18);
+    padding: 24px 16px 16px 16px;
+    border: 2px solid #f92672;
+}
+
+.layer {
+    display: flex;
+    flex-direction: row;
+    gap: 60px;
+    align-items: center;
+    margin-top: -40px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(3, 60px);
+    gap: 6px;
+    transform: rotateX(60deg) rotateZ(45deg);
+    transform-style: flat;
+}
+
+.slot {
+    background-color: var(--slot-color, #dbeafe);
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(80, 80, 120, 0.10);
+    background-color: var(--slot-color, #49483e);
+    opacity: var(--slot-opacity, 1.0);
+    border: 2px solid #a6e22e;
+    box-shadow: 0 2px 12px rgba(39, 40, 34, 0.18);
+}
+
+.slot.center-slot {
+    background-color: #302f2f;
+}
+
+.winning-line {
+    opacity: 1.0;
+}
+
+.game-control {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 0.7em;
+    margin: 0.7em auto;
+}

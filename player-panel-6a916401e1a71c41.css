@@ -1,0 +1,60 @@
+.player-panel {
+    width: 290px;
+    padding: 20px 18px;
+    background: linear-gradient(135deg, #272822 0%, #49483e 100%);
+    border-radius: 14px;
+    box-shadow: 0 6px 24px rgba(39, 40, 34, 0.18);
+    font-family: 'Fira Mono', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'monospace';
+    color: #f8f8f2;
+    font-weight: 500;
+}
+
+.active-turn {
+    border: 2px solid #a6e22e;
+    background: #49483e;
+}
+
+.cubies-remaining {
+    display: grid;
+    grid-template-columns: repeat(6, 20px);
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.cubie-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(80, 80, 120, 0.10);
+    border: 2px solid #a6e22e;
+}
+
+.cubie-icon.Blue {
+    background-color: var(--cubie-blue);
+    border-color: var(--cubie-blue);
+}
+
+.cubie-icon.Red {
+    background-color: var(--cubie-red);
+    border-color: var(--cubie-red);
+}
+
+.move-list {
+    margin-top: 14px;
+    list-style-type: none;
+    padding-left: 0;
+}
+
+.move-list li {
+    margin-bottom: 6px;
+    cursor: pointer;
+    background: #49483e;
+    color: #a6e22e;
+    font-weight: 500;
+    transition: border-color 0.2s;
+    border: 1.5px solid transparent;
+}
+
+.move-highlighted {
+    box-shadow: 0 0 0 4px var(--highlight-color);
+}
