@@ -35,7 +35,7 @@ pub fn app() -> Html {
                 </a>
                 { " 🦀" }
             </p>
-            <OneshotProvider<EvaluationTask> path="/worker.js">
+            <OneshotProvider<EvaluationTask> path="/rubik-cage/worker.js">
                 <HoveredMoveProvider>
                     <div class="game-area">
                         <PlayerPanel
