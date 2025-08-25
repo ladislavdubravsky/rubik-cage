@@ -5,6 +5,9 @@ use crate::{
 use std::{cell::RefCell, collections::HashMap};
 use yew::prelude::*;
 
+pub const STORAGE_KEY: &str = "rubik_cage_position";
+pub const RELOAD_FLAG_KEY: &str = "load_position_on_next_reload";
+
 pub fn apply_move_callback(
     game_state_handle: UseStateHandle<GameState>,
     history_handle: UseStateHandle<Vec<GameState>>,
@@ -119,4 +122,23 @@ pub fn slot_to_css(cubie: Option<Cubie>) -> &'static str {
         Some(Cubie::Red) => "var(--cubie-red)",
         _ => "var(--slot-empty)",
     }
+}
+
+pub fn bytes_to_hex(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<String>()
+}
+
+pub fn hex_to_bytes(hex: &str) -> Option<Vec<u8>> {
+    if hex.len() % 2 != 0 {
+        return None;
+    }
+    Some(
+        (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok())
+            .collect::<Option<Vec<u8>>>()?,
+    )
 }

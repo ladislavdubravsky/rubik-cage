@@ -1,4 +1,4 @@
-use crate::core::game::GameState;
+use crate::{app::utils::RELOAD_FLAG_KEY, core::game::GameState};
 use bincode::{decode_from_slice, encode_to_vec};
 use web_sys::{
     HtmlInputElement, Url, js_sys,
@@ -33,6 +33,10 @@ pub fn game_control(props: &GameControlProps) -> Html {
 
     let game_state_handle = props.game_state.clone();
     let export = Callback::from(move |_| {
+        // Set reload flag in localStorage before export-triggered reload
+        if let Some(storage) = web_sys::window().and_then(|w| w.local_storage().ok().flatten()) {
+            storage.set_item(RELOAD_FLAG_KEY, "true").ok();
+        }
         let state = &*game_state_handle;
         let bin = encode_to_vec(state, bincode::config::standard()).unwrap();
         let uint8_array = js_sys::Uint8Array::from(bin.as_slice());
