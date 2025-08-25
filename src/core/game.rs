@@ -5,16 +5,17 @@ use crate::core::{
     r#move::{Layer, Move, Rotation},
     zobrist,
 };
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub struct Player {
     pub color: Cubie,
     pub id: u8,
 }
 
 // TODO: enable more than 2 players and more than 1 color per player
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub struct GameState {
     pub cage: Cage,
     pub players: [Player; 2],

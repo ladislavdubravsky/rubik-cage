@@ -1,4 +1,9 @@
 use crate::core::game::GameState;
+use bincode::{decode_from_slice, encode_to_vec};
+use web_sys::{
+    HtmlInputElement, Url, js_sys,
+    wasm_bindgen::{JsCast, prelude::Closure},
+};
 use yew::prelude::*;
 
 #[derive(Properties, PartialEq)]
@@ -26,20 +31,66 @@ pub fn game_control(props: &GameControlProps) -> Html {
         history_handle.set(Vec::new());
     });
 
-    let export = Callback::from(|_| {
-        // TODO: Implement export position to file
-        web_sys::window()
-            .unwrap()
-            .alert_with_message("Export position not implemented")
-            .ok();
+    let game_state_handle = props.game_state.clone();
+    let export = Callback::from(move |_| {
+        let state = &*game_state_handle;
+        let bin = encode_to_vec(state, bincode::config::standard()).unwrap();
+        let uint8_array = js_sys::Uint8Array::from(bin.as_slice());
+        let blob =
+            web_sys::Blob::new_with_u8_array_sequence(&js_sys::Array::of1(&uint8_array)).unwrap();
+        let url = Url::create_object_url_with_blob(&blob).unwrap();
+        let window = web_sys::window().unwrap();
+        window.open_with_url(&url).unwrap();
+        Url::revoke_object_url(&url).unwrap();
     });
 
-    let import = Callback::from(|_| {
-        // TODO: Implement import position from file
-        web_sys::window()
-            .unwrap()
-            .alert_with_message("Import position not implemented")
-            .ok();
+    let game_state_handle = props.game_state.clone();
+    let history_handle = props.history.clone();
+    let import = Callback::from(move |_| {
+        let window = web_sys::window().unwrap();
+        let document = window.document().unwrap();
+        let input = document.create_element("input").unwrap();
+        input.set_attribute("type", "file").unwrap();
+        input.set_attribute("accept", ".bin").unwrap();
+        let input_html: HtmlInputElement = input.unchecked_into();
+        let game_state_handle = game_state_handle.clone();
+        let history_handle = history_handle.clone();
+        let window = window.clone();
+        let input_html_handle = input_html.clone();
+        let closure = Closure::wrap(Box::new(move |_: web_sys::Event| {
+            let files = input_html_handle.files();
+            if let Some(files) = files {
+                if let Some(file) = files.get(0) {
+                    let fr = web_sys::FileReader::new().unwrap();
+                    let fr_clone = fr.clone();
+                    let game_state_handle = game_state_handle.clone();
+                    let history_handle = history_handle.clone();
+                    let window = window.clone();
+                    let onload = Closure::wrap(Box::new(move |_e: web_sys::Event| {
+                        let result = fr_clone.result().unwrap();
+                        let array = js_sys::Uint8Array::new(&result);
+                        let mut vec = vec![0u8; array.length() as usize];
+                        array.copy_to(&mut vec[..]);
+                        if let Ok((state, _)) =
+                            decode_from_slice::<GameState, _>(&vec, bincode::config::standard())
+                        {
+                            game_state_handle.set(state);
+                            history_handle.set(Vec::new());
+                        } else {
+                            window.alert_with_message("Failed to import position").ok();
+                        }
+                    }) as Box<dyn FnMut(_)>);
+                    fr.set_onload(Some(onload.as_ref().unchecked_ref()));
+                    fr.read_as_array_buffer(&file).unwrap();
+                    onload.forget();
+                }
+            }
+        }) as Box<dyn FnMut(_)>);
+        input_html.set_onchange(Some(closure.as_ref().unchecked_ref()));
+        document.body().unwrap().append_child(&input_html).unwrap();
+        input_html.click();
+        document.body().unwrap().remove_child(&input_html).unwrap();
+        closure.forget();
     });
 
     html! {

@@ -1,7 +1,10 @@
+use bincode::{Decode, Encode};
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Encode, Decode,
+)]
 pub enum Cubie {
     White,
     Yellow,

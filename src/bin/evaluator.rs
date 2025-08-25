@@ -12,10 +12,8 @@ use rubik_cage::{
 use std::{collections::HashMap, thread};
 
 // TODO: analyze positions which take the longest to win etc.
-// TODO: allow import/export position in webapp?
 // TODO: table of results for (m, n) games
-// TODO: finish README and deployment
-// TODO: allow arbitrary (m, n) games
+// TODO: allow arbitrary (m, n) games in UI
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]

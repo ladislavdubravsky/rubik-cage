@@ -2,10 +2,13 @@ use crate::core::{
     cubie::Cubie,
     line::{Line, SLOT_TO_LINES},
 };
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, str::FromStr};
 
-#[derive(Clone, Copy, Debug, Hash, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Hash, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Encode, Decode,
+)]
 pub struct Cage {
     pub grid: [[[Option<Cubie>; 3]; 3]; 3],
 }

@@ -1,22 +1,26 @@
 #![allow(dead_code)]
 use crate::core::{cage::Cage, cubie::Cubie};
 use serde::{Deserialize, Serialize};
+use bincode::{Decode, Encode};
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Serialize, Deserialize, Encode, Decode)]
 pub enum Rotation {
     Clockwise,
     CounterClockwise,
     HalfTurn,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Serialize, Deserialize, Encode, Decode)]
 pub enum Layer {
     Down,
     Equator,
     Up,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Serialize, Deserialize, Encode, Decode)]
 pub enum Move {
     Drop {
         color: Cubie,
