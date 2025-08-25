@@ -8,6 +8,7 @@ use crate::{
     search::naive::{Evaluation, SearchMode},
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use web_sys::window;
 use yew::{platform::spawn_local, prelude::*, use_effect_with};
 use yew_agent::oneshot::use_oneshot_runner;
 
@@ -40,7 +41,17 @@ fn eval_to_string(eval: Option<&Evaluation>, player_id: u8) -> String {
 #[function_component(PlayerPanel)]
 pub fn player_panel(props: &PlayerPanelProps) -> Html {
     let is_turn = props.game_state.player_to_move.id == props.player.id;
-    let move_list_visible = use_state(|| false);
+
+    // Persist move_list_visible state in localStorage per player
+    let player_id = props.player.id;
+    let storage_key = format!("move_list_visible_{}", player_id);
+    let move_list_visible = use_state(|| {
+        window()
+            .and_then(|w| w.local_storage().ok().flatten())
+            .and_then(|storage| storage.get_item(&storage_key).ok().flatten())
+            .map(|v| v == "true")
+            .unwrap_or(false)
+    });
     let eval = props.eval.clone();
 
     let is_won = props.game_state.won().is_some();
@@ -98,6 +109,20 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
             || ()
         },
     );
+
+    // Save move_list_visible to localStorage on change
+    {
+        let move_list_visible = move_list_visible.clone();
+        let storage_key = storage_key.clone();
+        use_effect_with(move_list_visible.clone(), move |visible| {
+            if let Some(storage) = window().and_then(|w| w.local_storage().ok().flatten()) {
+                storage
+                    .set_item(&storage_key, if **visible { "true" } else { "false" })
+                    .ok();
+            }
+            || ()
+        });
+    }
 
     html! {
         <div class={classes!("player-panel", if is_turn { "active-turn" } else { "" })}>
