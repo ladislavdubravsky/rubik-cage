@@ -4,14 +4,14 @@
         <meta charset="utf-8" />
         <title>Rubik's cage simulator</title>
 
-        <link rel="stylesheet" href="/app-7a457f241511b104.css" integrity="sha384-aEskjcoZ/gV0XlnNAfb7MUU9/RPf7616G7HJdbQXG+AzPIz6vPNIl3ak36a5bpAu"/>
-        <link rel="stylesheet" href="/player-panel-6a916401e1a71c41.css" integrity="sha384-CXEbBhbRgtv24hLKQy0cPJkv+3OkpeNjKEb0AwACdoAln66jVOB993pKPBw6Dkk6"/>
-        <link rel="stylesheet" href="/cage-a5204f5b88534e6.css" integrity="sha384-LBdoetsW/pgkcqS1gK+3nIcqLs9G9Qf8oaR7UqqlVwCC9TX4sWLlGqd3eUPvFjx/"/>
+        <link rel="stylesheet" href="/rubik-cage/app-7a457f241511b104.css" integrity="sha384-aEskjcoZ/gV0XlnNAfb7MUU9/RPf7616G7HJdbQXG+AzPIz6vPNIl3ak36a5bpAu"/>
+        <link rel="stylesheet" href="/rubik-cage/player-panel-6a916401e1a71c41.css" integrity="sha384-CXEbBhbRgtv24hLKQy0cPJkv+3OkpeNjKEb0AwACdoAln66jVOB993pKPBw6Dkk6"/>
+        <link rel="stylesheet" href="/rubik-cage/cage-a5204f5b88534e6.css" integrity="sha384-LBdoetsW/pgkcqS1gK+3nIcqLs9G9Qf8oaR7UqqlVwCC9TX4sWLlGqd3eUPvFjx/"/>
 
         
 <script type="module">
-import init, * as bindings from '/app-557000f242c79978.js';
-const wasm = await init({ module_or_path: '/app-557000f242c79978_bg.wasm' });
+import init, * as bindings from '/rubik-cage/app-557000f242c79978.js';
+const wasm = await init({ module_or_path: '/rubik-cage/app-557000f242c79978_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -21,6 +21,6 @@ dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
 
 </script>
         
-    <link rel="modulepreload" href="/app-557000f242c79978.js" crossorigin="anonymous" integrity="sha384-J08wWbhzGiqR322tQeyVNblJqS5x1ZCcK5EmLfNX2gvmpgy4QL/rPJHJpJdBn0SR"><link rel="preload" href="/app-557000f242c79978_bg.wasm" crossorigin="anonymous" integrity="sha384-9mZIAJtimlVyH7sZcPJmt6GACAyKBvZe9YAqueRnr97YVi/ZGiy8bd8+A6+y5qWN" as="fetch" type="application/wasm"></head>
+    <link rel="modulepreload" href="/rubik-cage/app-557000f242c79978.js" crossorigin="anonymous" integrity="sha384-J08wWbhzGiqR322tQeyVNblJqS5x1ZCcK5EmLfNX2gvmpgy4QL/rPJHJpJdBn0SR"><link rel="preload" href="/rubik-cage/app-557000f242c79978_bg.wasm" crossorigin="anonymous" integrity="sha384-9mZIAJtimlVyH7sZcPJmt6GACAyKBvZe9YAqueRnr97YVi/ZGiy8bd8+A6+y5qWN" as="fetch" type="application/wasm"></head>
     <body></body>
 </html>
