@@ -142,3 +142,35 @@ pub fn evaluation_provider(props: &EvaluationProviderProps) -> Html {
         </ContextProvider<EvaluationContext>>
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::r#move::Move;
+    #[test]
+    fn shipped_table_covers_every_initial_move() {
+        let state = GameState::new(12, 12);
+        let values = precomputed();
+        assert_eq!(state.legal_moves().len(), 15);
+        for m in state.legal_moves() {
+            let mut child = state;
+            child.apply_move(m).unwrap();
+            let expected = match m {
+                Move::Drop { column: (x, y), .. } if x == 1 || y == 1 => Evaluation::Draw,
+                Move::Drop { .. } => Evaluation::Win {
+                    winner: 0,
+                    plies: 10,
+                },
+                _ => Evaluation::Win {
+                    winner: 1,
+                    plies: 11,
+                },
+            };
+            assert_eq!(
+                values.get(&child.position_key()),
+                Some(&expected),
+                "Missing or wrong evaluation for {m}"
+            );
+        }
+    }
+}

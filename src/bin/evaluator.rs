@@ -19,7 +19,7 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
-    /// Prove exact wins with finite horizons; retain unknowns and a checkable proof.
+    /// Prove wins with finite horizons and draws with closed safety strategies.
     Precompute {
         p1_cubies: u8,
         p2_cubies: u8,
@@ -37,7 +37,7 @@ enum Command {
         #[arg(long, default_value_t = 2_000_000)]
         calls_per_position: u64,
     },
-    /// Verify all horizon claims against core, then certify a table's retained entries.
+    /// Verify horizon and safety claims against core, then certify retained table entries.
     VerifyProof {
         proof: String,
         #[arg(long)]
@@ -142,6 +142,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 search.calls,
                 start.elapsed()
             );
+            println!("Closed {} safety claims", search.proof.close_safety());
             println!("Verifying certificate against ordinary core transitions...");
             search.proof.verify()?;
             let values = search.proof.exact_values();
@@ -149,6 +150,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 "Root: {:?}; {} exact entries; missing entries remain unknown",
                 values.get(&root.position_key()),
                 values.len()
+            );
+            let opening_covered = positions
+                .iter()
+                .filter(|(p, _)| {
+                    let state = search.proof.space.decode(*p);
+                    rubik_cage::search::Evaluation::terminal(&state).is_some()
+                        || values.contains_key(&state.position_key())
+                })
+                .count();
+            println!(
+                "Certified opening coverage: {opening_covered}/{}",
+                positions.len()
             );
             search.proof.save(&proof)?;
             Table {
@@ -165,8 +178,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Command::VerifyProof { proof, table } => {
             let proof = Proof::load(&proof)?;
             println!(
-                "Verified {} horizon bounds against core",
-                proof.bounds.len()
+                "Verified {} horizon bounds and {} safety claims against core",
+                proof.bounds.len(),
+                proof.safe.len()
             );
             if let Some(path) = table {
                 let table = Table::load(path)?;

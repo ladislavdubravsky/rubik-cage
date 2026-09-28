@@ -47,8 +47,6 @@ try {
   await call('Target.setDiscoverTargets', {discover: true});
   await call('Page.navigate', {url: base});
   await wait('!!document.querySelector(".cage")', 'app mount');
-  await wait('document.body.innerText.includes("Search incomplete")', '12,12 unresolved alternatives remain unknown');
-  assert.equal(workers.size, 1, 'one shared worker for both panels');
 
   // Legacy format intentionally exercises saved-position migration (derived hash = 0).
   function legacy(p1, p2, bottom = '.........') {
@@ -83,7 +81,28 @@ try {
   const clickButton = text => js(`[...document.querySelectorAll('button')].find(b => b.textContent === ${JSON.stringify(text)}).click()`);
 
   await enableLists();
-  assert((await rows()).some(r => r.includes('Unknown')), 'unproved edge drops remain unknown');
+  await wait("document.querySelectorAll('.active-turn .move-list li').length === 15", 'all opening moves');
+  const opening = await rows();
+  for (const row of opening) {
+    const drop = row.match(/^Drop at (\d),(\d): /);
+    const expected = drop ? (drop[1] === '1' || drop[2] === '1' ? 'Draw' : 'Win in 11') : 'Loss in 12';
+    assert(row.endsWith(`: ${expected}`), `Opening evaluation: ${row}, expected ${expected}`);
+  }
+  assert(!await js('document.body.innerText.includes("Search incomplete")'));
+  for (const move of ['Flip:', 'Rotate Down CW:', 'Rotate Up CCW:']) {
+    await clickMove(move);
+    await wait("document.querySelector('.active-turn .move-list li')?.textContent.endsWith('Win in 11')", 'P2 wins after an empty-board move');
+    assert((await rows()).every(r => !/Unknown|Calculating/.test(r)));
+    await clickButton('Undo last move');
+    await delay(80);
+    assert.deepEqual(await rows(), opening);
+  }
+  // Play the newly certified draw, then return to the opening without losing it.
+  await clickMove('Drop at 0,1:');
+  await wait("document.querySelector('.active-turn .move-list li')?.textContent.endsWith('Draw')", 'edge drop preserves a draw');
+  await clickButton('Undo last move');
+  await delay(80);
+  assert.deepEqual(await rows(), opening);
   for (let n = 11; n > 0; n--) {
     await wait(`document.querySelector('.active-turn .move-list li')?.textContent.match(/(?:Win|Loss) in ${n}$/)`, `12,12 best move at ${n} plies`);
     const moves = await rows();
@@ -136,10 +155,10 @@ try {
   assert.equal((await rows()).length, 0);
   assert(await js('[...document.querySelectorAll(".cage > button, .layer button")].every(e => e.disabled)'));
   assert.deepEqual(exceptions, [], 'browser runtime exceptions');
-  console.log('PASS: verified 11-ply full-inventory game, unknown alternatives, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw');
+  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw');
 } finally {
   ws?.close();
   const exited = chrome.exitCode !== null ? Promise.resolve() : new Promise(resolve => chrome.once('exit', resolve));
   chrome.kill('SIGTERM'); await exited;
-  await rm(profile, {recursive: true, force: true});
+  await rm(profile, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
 }
