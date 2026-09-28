@@ -32,6 +32,17 @@ trunk build --release
 
 or `trunk serve` to serve with hot reloading.
 
+### Deploying to GitHub Pages
+
+Push the desired commits to `main`, then run the manual [Deploy to GitHub Pages workflow](https://github.com/ladislavdubravsky/rubik-cage/actions/workflows/deploy.yml) with **Run workflow → main**. With the GitHub CLI:
+
+```sh
+git push origin main
+gh workflow run deploy.yml --ref main
+```
+
+The workflow builds with pinned Trunk and locked dependencies, publishes `dist` to `gh-pages`, and GitHub Pages then deploys that branch. Wait for both workflows to finish before checking the [live app](https://ladislavdubravsky.github.io/rubik-cage/). Pushing `main` alone does not deploy.
+
 ### Choosing a game size
 
 Click **Game settings** beneath the board to choose 0–12 starting cubies independently for each player. **Start new game** clears the board and undo history, gives P1 the first turn, and closes the panel. **Cancel** leaves the game unchanged; restarting preserves the chosen sizes.

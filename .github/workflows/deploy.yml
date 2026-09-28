@@ -19,10 +19,10 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install Trunk
-        run: cargo install trunk
+        run: cargo install trunk --version 0.21.14 --locked
 
       - name: Build with Trunk
-        run: trunk build --release
+        run: trunk build --release --locked
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
