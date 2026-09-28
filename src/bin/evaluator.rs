@@ -4,6 +4,7 @@ use rubik_cage::{
     core::game::GameState,
     search::{
         EvaluationMap,
+        bounded::{Budget, Proof, Search},
         cache::{Coverage, Table},
         retrograde::{self, Limits},
     },
@@ -18,6 +19,30 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Prove exact wins with finite horizons; retain unknowns and a checkable proof.
+    Precompute {
+        p1_cubies: u8,
+        p2_cubies: u8,
+        outpath: String,
+        #[arg(long)]
+        proof: String,
+        #[arg(long, default_value_t = 4)]
+        opening_plies: u8,
+        #[arg(long, default_value_t = 18, value_parser = clap::value_parser!(u8).range(..255))]
+        max_horizon: u8,
+        #[arg(long, default_value_t = 1_000_000)]
+        max_positions: usize,
+        #[arg(long, default_value_t = 100_000_000)]
+        max_calls: u64,
+        #[arg(long, default_value_t = 2_000_000)]
+        calls_per_position: u64,
+    },
+    /// Verify all horizon claims against core, then certify a table's retained entries.
+    VerifyProof {
+        proof: String,
+        #[arg(long)]
+        table: Option<String>,
+    },
     Evaluate {
         p1_cubies: u8,
         p2_cubies: u8,
@@ -39,6 +64,124 @@ enum Command {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     match Cli::parse().command {
+        Command::Precompute {
+            p1_cubies,
+            p2_cubies,
+            outpath,
+            proof,
+            opening_plies,
+            max_horizon,
+            max_positions,
+            max_calls,
+            calls_per_position,
+        } => {
+            if outpath == proof {
+                return Err("Table and proof paths must differ".into());
+            }
+            let root = GameState::new(p1_cubies, p2_cubies);
+            let mut search = Search::new(
+                &root,
+                Budget {
+                    max_positions,
+                    max_calls,
+                },
+            )?;
+            let start = Instant::now();
+            let pos = search.proof.space.encode(&root);
+            let mut positions = vec![(pos, 0u8)];
+            let mut seen = std::collections::HashSet::from([pos]);
+            let mut index = 0;
+            while index < positions.len() {
+                let (position, depth) = positions[index];
+                if depth < opening_plies {
+                    let children = search.proof.space.children(position);
+                    for &child in &children.items[..children.len] {
+                        if !seen.contains(&child) {
+                            if positions.len() >= max_positions {
+                                return Err("Opening enumeration exceeds --max-positions; use fewer opening plies".into());
+                            }
+                            seen.insert(child);
+                            positions.push((child, depth + 1));
+                        }
+                    }
+                }
+                index += 1;
+            }
+            let mut solved = 0;
+            let mut limited = 0;
+            for (index, (position, _)) in positions.iter().enumerate() {
+                let state = search.proof.space.decode(*position);
+                search.budget.max_calls =
+                    max_calls.min(search.calls.saturating_add(calls_per_position));
+                match search.exact(&state, max_horizon) {
+                    Ok(Some(_)) => solved += 1,
+                    Ok(None) => (),
+                    Err(_) => limited += 1,
+                }
+                if index % 100 == 0 {
+                    println!(
+                        "Opening {index}/{}; solved={solved}; bounds={}; calls={}; elapsed={:?}",
+                        positions.len(),
+                        search.proof.bounds.len(),
+                        search.calls,
+                        start.elapsed()
+                    );
+                }
+                if search.calls >= max_calls {
+                    break;
+                }
+            }
+            search.budget.max_calls = max_calls;
+            if let Err(error) = search.refine_wins() {
+                println!("Refinement incomplete: {error}");
+            }
+            println!(
+                "Opening solved {solved}/{}; budget-limited queries={limited}; bounds={}; calls={}; search time={:?}",
+                positions.len(),
+                search.proof.bounds.len(),
+                search.calls,
+                start.elapsed()
+            );
+            println!("Verifying certificate against ordinary core transitions...");
+            search.proof.verify()?;
+            let values = search.proof.exact_values();
+            println!(
+                "Root: {:?}; {} exact entries; missing entries remain unknown",
+                values.get(&root.position_key()),
+                values.len()
+            );
+            search.proof.save(&proof)?;
+            Table {
+                roots: vec![root.position_key()],
+                coverage: Coverage::Subset,
+                values,
+            }
+            .save(outpath)?;
+            println!(
+                "Verified proof and table saved; total time {:?}",
+                start.elapsed()
+            );
+        }
+        Command::VerifyProof { proof, table } => {
+            let proof = Proof::load(&proof)?;
+            println!(
+                "Verified {} horizon bounds against core",
+                proof.bounds.len()
+            );
+            if let Some(path) = table {
+                let table = Table::load(path)?;
+                let certified = proof.exact_values();
+                for (key, value) in &table.values {
+                    if certified.get(key) != Some(value) {
+                        return Err(format!("Table entry lacks an exact proof: {key:?}").into());
+                    }
+                }
+                println!(
+                    "Certified all {} retained table entries",
+                    table.values.len()
+                );
+            }
+        }
         Command::Evaluate {
             p1_cubies,
             p2_cubies,
@@ -88,7 +231,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("{} entries; {:?}", table.values.len(), table.coverage);
             if table.coverage == Coverage::Subset {
                 println!(
-                    "Format and retained entries validated; full minimax verification requires the complete source table"
+                    "Format and retained entries validated; minimax verification requires the complete source table or verify-proof with its certificate"
                 );
             }
         }

@@ -94,7 +94,7 @@ impl Table {
             generator: concat!(
                 "rubik-cage ",
                 env!("CARGO_PKG_VERSION"),
-                " exact-retrograde-v1"
+                " verified-exact-v1"
             )
             .into(),
             roots: self.roots.clone(),

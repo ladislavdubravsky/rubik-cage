@@ -1,5 +1,7 @@
 //! Exact graph minimax. The historical `naive.rs` is deliberately not compiled.
+pub mod bounded;
 pub mod cache;
+pub mod packed;
 pub mod retrograde;
 
 use crate::core::{
