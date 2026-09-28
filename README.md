@@ -20,7 +20,7 @@ For now we only consider two players, and each has cubies of one color only. If 
 
 A player cannot undo the opponent's immediate previous move. Empty-layer rotations and other moves that leave the board unchanged are still legal and update this restriction. A move producing lines for both players is a draw; indefinite play is also evaluated as a draw.
 
-The exact solver uses retrograde analysis of the finite game graph, including the previous-move restriction. Small games are verified against an independent fixed-point solver. The previous claims about solving every inventory, including `(12,12)`, came from an unsound search and are withdrawn. Under the corrected rules, `(3,1)` is a P1 win in 9 plies and `(3,2)` is drawn. A ply is one player's move.
+Exact evaluation combines retrograde analysis of complete game graphs with finite-horizon minimax for larger games. Both include the previous-move restriction. Under the corrected rules, `(12,12)` is a **P1 win in 11 plies**, `(3,1)` is a P1 win in 9, and `(3,2)` is drawn. A ply is one player's move. The new `(12,12)` result has an independently checked proof; earlier claims from the unsound solver are superseded. This does not mean every reachable position has been evaluated.
 
 ## Webapp build
 
@@ -34,31 +34,42 @@ or `trunk serve` to serve with hot reloading.
 
 ### Precomputing evaluations
 
-[eval-v1.bin](./assets/eval-v1.bin) is a verified complete `(3,1)` table containing 2,668 exact positions. Keys include the board, turn, inventories, colors and the immediate-undo restriction, canonicalized together. The format records rules, key and solver versions and distinguishes complete from filtered tables. The old `assets/eval.bin` is retained only as a rejected legacy regression fixture; it is never loaded by the app.
+[eval-v1.bin](./assets/eval-v1.bin) contains **122,245 exact `(12,12)` evaluations**, with an independently checkable [proof](./assets/eval-v1.proof.bin). This is a subset: it includes the opening winning strategy and many alternatives; missing entries remain unknown. The browser also loads a complete `(3,1)` table from [eval-3-1.bin](./assets/eval-3-1.bin).
 
-Generate, independently verify, then optionally filter a table:
+Keys include board, turn, inventories, colors and immediate-undo restriction, canonicalized together. The format records compatibility versions and coverage. The old `assets/eval.bin` is retained only as a rejected legacy regression fixture; the app never loads it.
+
+Regenerate and certify the full-inventory subset:
 
 ```sh
-cargo run --release --bin evaluator -- evaluate 3 1 assets/eval-v1.bin
-cargo run --release --bin evaluator -- verify assets/eval-v1.bin
-cargo run --release --bin evaluator -- filter assets/eval-v1.bin /tmp/eval-subset.bin 3
+cargo run --release --bin evaluator -- precompute 12 12 assets/eval-v1.bin \
+  --proof assets/eval-v1.proof.bin --opening-plies 4 --max-horizon 18
+cargo run --release --bin evaluator -- verify-proof assets/eval-v1.proof.bin \
+  --table assets/eval-v1.bin
 ```
 
-Native searches default to 100,000 states and 1,500,000 edges. Override these with `--max-states` and `--max-edges` on `evaluate`. Reaching a limit returns an error and writes no table. Filtering preserves metadata; missing entries mean unknown. Full minimax verification of a subset requires its complete source table.
+Generate a complete small-game table, independently verify it, then optionally filter it:
 
-The browser retains the `(12,12)` starting game, but its initial evaluation is currently **unknown**: each background request is bounded to 20,000 states and 300,000 edges. The app displays exact results only after a complete solve (or a compatible cache hit); exceeding the budget never becomes a draw. Larger precomputation and graph-storage/component optimizations remain future work. A single shared worker reuses exact results between requests.
+```sh
+cargo run --release --bin evaluator -- evaluate 3 1 assets/eval-3-1.bin
+cargo run --release --bin evaluator -- verify assets/eval-3-1.bin
+cargo run --release --bin evaluator -- filter assets/eval-3-1.bin /tmp/eval-subset.bin 3
+```
+
+Complete graph searches default to 100,000 states / 1,500,000 edges; `--max-states` and `--max-edges` override these. Horizon precomputation has explicit position/call budgets and publishes only proved exact distances, never inferred draws. See [the algorithm, proof format, budgets and measurements](docs/horizon-search.md).
+
+The browser starts at `(12,12)` with a proved corner-drop win in 11. Edge drops remain unknown within the current search limits. A single shared worker reuses exact values and finite-horizon bounds, with complete graph analysis available for draws. It can publish exact results for some moves while others remain unknown. Exhausting a budget never becomes a draw or an invented distance.
 
 Move-row distances include the selected move: an immediate win displays “Win in 1.” Imported legacy positions are validated and their derived identity is rebuilt; newly exported positions use a versioned format. Restart preserves the imported game's initial inventories and colors.
 
 ## Playing with core logic
 
-Run `cargo test --all-targets` for model, symmetry, graph, cache and migration tests. The production solver is in `src/search/retrograde.rs`; historical `naive.rs` is not compiled.
+Run `cargo test --all-targets` for model, symmetry, graph, cache and migration tests. The production solvers are `src/search/retrograde.rs` and `src/search/bounded.rs`; historical `naive.rs` is not compiled.
 
 ```sh
 cargo run --release --example audit_search -- 3 1
 cargo build --release --target wasm32-unknown-unknown --bin app --bin worker
 ```
 
-For the browser regression, serve a Trunk build and run `node scripts/browser_smoke.mjs http://127.0.0.1:8080/rubik-cage/` (Node 22+ and Google Chrome; `CHROME` can select another Chromium binary). This exercises worker reuse, the original move sequence, an optimal 9-ply game, unknown results at limits, saved-position import, undo/restart, and simultaneous-line termination.
+For the browser regression, serve a Trunk build and run `node scripts/browser_smoke.mjs http://127.0.0.1:8080/rubik-cage/` (Node 22+ and Google Chrome; `CHROME` can select another Chromium binary). This exercises worker reuse, the original move sequence, optimal 11-ply `(12,12)` and 9-ply `(3,1)` games, unknown alternatives, saved-position import, undo/restart, and simultaneous-line termination.
 
 See [the investigation](docs/search-investigation.md), [redesign plan](docs/search-redesign-plan.md), and [implementation notes](docs/search-implementation.md).

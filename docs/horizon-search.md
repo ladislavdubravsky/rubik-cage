@@ -33,6 +33,8 @@ Measured on this development machine (release build):
 | Published table | 122,245 exact decisive entries, about 5.5 MiB |
 | Independently checkable proof | about 4.5 MiB; not embedded in WASM |
 
+A second run reproduced both files byte-for-byte, took 9.6 seconds total, and used about 44 MiB peak RSS.
+
 These counts describe proof coverage, not enumeration of the entire reachable `(12,12)` graph. The table covers the opening winning strategy and many alternatives. Missing entries remain unknown. The separate complete `(3,1)` table is also retained by the browser.
 
 Native regressions compare packed transitions and terminal results with core on every state in several small complete games, compare horizon answers with exact graph values, check the `(12,12)` winning strategy and all its defenses, reject a corrupted proof, and verify that interruption never produces a draw. The browser regression plays an optimal 11-ply `(12,12)` game and checks losing replies against the displayed distances.

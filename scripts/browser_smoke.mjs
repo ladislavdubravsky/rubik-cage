@@ -47,7 +47,7 @@ try {
   await call('Target.setDiscoverTargets', {discover: true});
   await call('Page.navigate', {url: base});
   await wait('!!document.querySelector(".cage")', 'app mount');
-  await wait('document.body.innerText.includes("exceeds the search limit")', 'bounded 12,12 evaluation');
+  await wait('document.body.innerText.includes("Search incomplete")', '12,12 unresolved alternatives remain unknown');
   assert.equal(workers.size, 1, 'one shared worker for both panels');
 
   // Legacy format intentionally exercises saved-position migration (derived hash = 0).
@@ -81,6 +81,20 @@ try {
     await delay(60);
   };
   const clickButton = text => js(`[...document.querySelectorAll('button')].find(b => b.textContent === ${JSON.stringify(text)}).click()`);
+
+  await enableLists();
+  assert((await rows()).some(r => r.includes('Unknown')), 'unproved edge drops remain unknown');
+  for (let n = 11; n > 0; n--) {
+    await wait(`document.querySelector('.active-turn .move-list li')?.textContent.match(/(?:Win|Loss) in ${n}$/)`, `12,12 best move at ${n} plies`);
+    const moves = await rows();
+    const best = moves[0];
+    if (best.includes('Loss')) {
+      assert(moves.every(r => /Loss in \d+$/.test(r)), 'every defense is proved losing');
+      assert.equal(Math.max(...moves.map(r => Number(r.match(/Loss in (\d+)/)[1]))), n);
+    }
+    await clickMove(best.split(':')[0] + ':');
+  }
+  assert(await js('document.body.innerText.includes("Blue won!")'));
 
   await importPosition(legacy(3, 1));
   await enableLists();
@@ -122,7 +136,7 @@ try {
   assert.equal((await rows()).length, 0);
   assert(await js('[...document.querySelectorAll(".cage > button, .layer button")].every(e => e.disabled)'));
   assert.deepEqual(exceptions, [], 'browser runtime exceptions');
-  console.log('PASS: bounded large game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw');
+  console.log('PASS: verified 11-ply full-inventory game, unknown alternatives, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw');
 } finally {
   ws?.close();
   const exited = chrome.exitCode !== null ? Promise.resolve() : new Promise(resolve => chrome.once('exit', resolve));

@@ -2,7 +2,7 @@
 use super::agent::{EvaluationTask, EvaluationTaskSpec};
 use crate::{
     core::{game::GameState, position::PositionKey},
-    search::{self, Evaluation, EvaluationMap, cache::Table, retrograde::SolveError},
+    search::{self, Evaluation, EvaluationMap, cache::Table},
 };
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 use yew::{platform::spawn_local, prelude::*};
@@ -10,9 +10,18 @@ use yew_agent::oneshot::use_oneshot_runner;
 
 pub fn precomputed() -> EvaluationMap {
     // Incompatible data never reaches the running map. No legacy eval.bin fallback.
-    Table::decode(include_bytes!("../../assets/eval-v1.bin"))
-        .map(|t| t.values)
-        .unwrap_or_default()
+    let mut values = EvaluationMap::new();
+    for bytes in [
+        include_bytes!("../../assets/eval-v1.bin").as_slice(),
+        include_bytes!("../../assets/eval-3-1.bin").as_slice(),
+    ] {
+        if let Ok(table) = Table::decode(bytes) {
+            if search::merge_exact(&mut values, table.values).is_err() {
+                return EvaluationMap::new();
+            }
+        }
+    }
+    values
 }
 
 #[derive(Clone, PartialEq)]
@@ -77,19 +86,35 @@ pub fn evaluation_provider(props: &EvaluationProviderProps) -> Html {
                     if response.request_id != *serial.borrow() {
                         return;
                     }
-                    let error = match response.result {
-                        Ok(solution) => {
-                            let retained = solution.values.clone();
-                            let result = search::merge_exact(&mut values.borrow_mut(), solution.values);
-                            if result.is_ok() {
+                    let error = match search::merge_exact(&mut values.borrow_mut(), response.values)
+                    {
+                        Ok(()) => {
+                            // Retrying an incomplete root on every revision would loop forever.
+                            if response.problem.is_none() {
                                 attempted.borrow_mut().clear();
-                                if values.borrow().len() > 100_000 { *values.borrow_mut() = retained; }
                             }
-                            result.err().map(|_| "Conflicting evaluation results; please reload.".to_string())
+                            response.problem
                         }
-                        Err(SolveError::LimitReached(_)) => Some("This position exceeds the search limit. Unsolved moves remain unknown.".into()),
-                        Err(_) => Some("Evaluation could not be completed.".into()),
+                        Err(_) => {
+                            Some("Conflicting evaluation results; please reload.".to_string())
+                        }
                     };
+                    if values.borrow().len() > 500_000 {
+                        let mut keep = precomputed();
+                        let current = values.borrow();
+                        if let Some(&v) = current.get(&key) {
+                            keep.insert(key, v);
+                        }
+                        for m in state.legal_moves() {
+                            let mut child = state;
+                            child.apply_move(m).unwrap();
+                            if let Some(&v) = current.get(&child.position_key()) {
+                                keep.insert(child.position_key(), v);
+                            }
+                        }
+                        drop(current);
+                        *values.borrow_mut() = keep;
+                    }
                     if let Some(message) = error {
                         problem.set(Some((key, message)));
                     }
