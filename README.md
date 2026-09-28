@@ -36,7 +36,7 @@ or `trunk serve` to serve with hot reloading.
 
 Click **Game settings** beneath the board to choose 0–12 starting cubies independently for each player. **Start new game** clears the board and undo history, gives P1 the first turn, and closes the panel. **Cancel** leaves the game unchanged; restarting preserves the chosen sizes.
 
-Custom sizes are evaluated on demand by the shared background worker, including checks for proved draws. Results are reused in memory under inventory-specific keys; no additional precomputed files are needed. Larger positions can still show Unknown when the search budget is exhausted. The standard `(12,12)` opening keeps its bundled exact evaluations.
+Custom sizes are evaluated on demand by the shared background worker, including checks for proved draws. Results are reused in memory under complete state keys, including safe player-swap equivalents; no additional precomputed files are needed. Search continues automatically in bounded batches. If it reaches a limit, the UI says it is paused and offers **Continue search** when more resources are available. Larger positions can still remain Unknown at the final cap. The standard `(12,12)` opening keeps its bundled exact evaluations.
 
 ### Precomputing evaluations
 
@@ -71,7 +71,7 @@ The browser starts at `(12,12)` with all 15 opening moves evaluated:
 | Any edge drop | Draw |
 | Flip or any layer rotation | Loss in 12 |
 
-The empty-board Flip and Rotate moves give P2 a win in 11 more plies; their immediate-inverse restrictions are included in the proofs. A single shared worker reuses exact values and finite-horizon bounds, with complete graph analysis available for draws. It can publish exact results for some moves while others remain unknown. Exhausting a budget never becomes a draw or an invented distance.
+The empty-board Flip and Rotate moves give P2 a win in 11 more plies; their immediate-inverse restrictions are included in the proofs. A single shared worker reuses exact values and finite-horizon bounds, with complete graph analysis available for draws. Swapping players also swaps board ownership, stocks, turn and the winning player; the immediate-inverse restriction is preserved. This closes the `(3,3)` opening’s empty-board cycles, so all 15 initial moves are proved draws. It can publish exact results for some moves while others remain unknown. Exhausting a budget never becomes a draw or an invented distance.
 
 Move-row distances include the selected move: an immediate win displays “Win in 1.” Imported legacy positions are validated and their derived identity is rebuilt; newly exported positions use a versioned format. Restart preserves the imported game's initial inventories and colors.
 
@@ -84,6 +84,6 @@ cargo run --release --example audit_search -- 3 1
 cargo build --release --target wasm32-unknown-unknown --bin app --bin worker
 ```
 
-For the browser regression, serve a Trunk build and run `node scripts/browser_smoke.mjs http://127.0.0.1:8080/rubik-cage/` (Node 22+ and Google Chrome; `CHROME` can select another Chromium binary). This exercises worker reuse, the original move sequence, optimal 11-ply `(12,12)` and 9-ply `(3,1)` games, all opening labels and an edge-drop draw, saved-position import, undo/restart, simultaneous-line termination, and custom-size validation and switching during evaluation.
+For the browser regression, serve a Trunk build and run `node scripts/browser_smoke.mjs http://127.0.0.1:8080/rubik-cage/` (Node 22+ and Google Chrome; `CHROME` can select another Chromium binary). This exercises worker reuse, the original move sequence, optimal 11-ply `(12,12)` and 9-ply `(3,1)` games, all opening labels and an edge-drop draw, saved-position import, undo/restart, simultaneous-line termination, custom-size validation and switching during evaluation, the complete `(3,3)` opening, and search continuation.
 
 See [the investigation](docs/search-investigation.md), [redesign plan](docs/search-redesign-plan.md), and [implementation notes](docs/search-implementation.md).

@@ -38,6 +38,25 @@ impl PositionKey {
         }
     }
 
+    /// Relabel the players while keeping their display colors fixed. Stocks,
+    /// board ownership and turn all swap; the immediate-inverse restriction stays.
+    /// This maps an (m,n) game to (n,m), not two distinct states in the same game.
+    pub fn swapped_players(mut self) -> Self {
+        for color in self.cage.grid.iter_mut().flatten().flatten().flatten() {
+            *color = if *color == self.colors[0] {
+                self.colors[1]
+            } else {
+                self.colors[0]
+            };
+        }
+        self.remaining.swap(0, 1);
+        self.turn ^= 1;
+        (0..8)
+            .map(|symmetry| self.transformed(symmetry))
+            .max()
+            .unwrap()
+    }
+
     pub fn turn(&self) -> u8 {
         self.turn
     }
@@ -122,6 +141,33 @@ mod tests {
                 next.position_key()
             })
             .collect()
+    }
+
+    #[test]
+    fn swapping_players_preserves_all_legal_futures() {
+        for (m, n) in [(1, 1), (3, 1), (3, 2)] {
+            let root = GameState::new(m, n);
+            let graph =
+                crate::search::retrograde::solve(&root, &Default::default(), Default::default())
+                    .unwrap();
+            for &key in graph.values.keys() {
+                let swapped = key.swapped_players();
+                swapped.validate().unwrap();
+                assert_eq!(swapped.swapped_players(), key);
+                assert_eq!(
+                    successors(key.to_state())
+                        .into_iter()
+                        .map(PositionKey::swapped_players)
+                        .collect::<HashSet<_>>(),
+                    successors(swapped.to_state())
+                );
+                let expected = key.to_state().outcome().map(|o| match o {
+                    Outcome::Win(w) => Outcome::Win(1 - w),
+                    Outcome::Draw => Outcome::Draw,
+                });
+                assert_eq!(swapped.to_state().outcome(), expected);
+            }
+        }
     }
 
     #[test]

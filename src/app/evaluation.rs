@@ -1,10 +1,10 @@
 //! One app-level scheduler owns all evaluation requests and publishes exact values.
-use super::agent::{EvaluationTask, EvaluationTaskSpec};
+use super::agent::{AUTOMATIC_BATCHES, EvaluationTask, EvaluationTaskSpec, TaskStatus};
 use crate::{
     core::{game::GameState, position::PositionKey},
     search::{self, Evaluation, EvaluationMap, cache::Table},
 };
-use std::{cell::RefCell, collections::HashSet, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use yew::{platform::spawn_local, prelude::*};
 use yew_agent::oneshot::use_oneshot_runner;
 
@@ -29,18 +29,19 @@ pub struct EvaluationContext {
     pub values: Rc<RefCell<EvaluationMap>>,
     pub revision: u64,
     pub running: Option<PositionKey>,
-    pub problem: Option<(PositionKey, String)>,
+    pub problem: Option<(PositionKey, String, bool)>,
 }
 impl EvaluationContext {
     pub fn get(&self, state: &GameState) -> Option<Evaluation> {
-        Evaluation::terminal(state)
-            .or_else(|| self.values.borrow().get(&state.position_key()).copied())
+        search::lookup_exact(&self.values.borrow(), state)
     }
     pub fn unknown_label(&self, root: PositionKey) -> &'static str {
         if self.running == Some(root) {
             "Calculating..."
-        } else if self.problem.as_ref().is_some_and(|(k, _)| *k == root) {
-            "Unknown (search incomplete)"
+        } else if self.problem.as_ref().is_some_and(|(k, _, _)| *k == root) {
+            "Unknown (search paused)"
+        } else if self.running.is_some() {
+            "Queued..."
         } else {
             "Unknown"
         }
@@ -58,47 +59,63 @@ pub fn evaluation_provider(props: &EvaluationProviderProps) -> Html {
     let values = use_mut_ref(precomputed);
     let revision = use_state(|| 0u64);
     let running = use_state(|| None::<PositionKey>);
-    let problem = use_state(|| None::<(PositionKey, String)>);
-    let attempted = use_mut_ref(HashSet::<PositionKey>::new);
+    let attempts = use_mut_ref(HashMap::<PositionKey, u8>::new);
+    let paused = use_mut_ref(HashMap::<PositionKey, (String, bool)>::new);
     let serial = use_mut_ref(|| 0u64);
     let runner = use_oneshot_runner::<EvaluationTask>();
     let state = *props.state;
     let key = state.position_key();
+    let missing = state.legal_moves().into_iter().any(|m| {
+        let mut child = state;
+        child.apply_move(m).unwrap();
+        search::lookup_exact(&values.borrow(), &child).is_none()
+    });
     {
         let values = values.clone();
         let revision = revision.clone();
         let running = running.clone();
-        let problem = problem.clone();
+        let attempts = attempts.clone();
+        let paused = paused.clone();
         use_effect_with((key, *revision, *running), move |_| {
-            let missing = state.legal_moves().into_iter().any(|m| {
-                let mut child = state;
-                child.apply_move(m).unwrap();
-                Evaluation::terminal(&child).is_none()
-                    && !values.borrow().contains_key(&child.position_key())
-            });
-            if running.is_none() && missing && attempted.borrow_mut().insert(key) {
+            if running.is_none() && missing && !paused.borrow().contains_key(&key) {
+                let batch = *attempts.borrow().get(&key).unwrap_or(&0);
+                attempts.borrow_mut().insert(key, batch + 1);
                 running.set(Some(key));
-                problem.set(None);
                 *serial.borrow_mut() += 1;
                 let request_id = *serial.borrow();
                 spawn_local(async move {
-                    let response = runner.run(EvaluationTaskSpec { state, request_id }).await;
+                    let response = runner
+                        .run(EvaluationTaskSpec {
+                            state,
+                            request_id,
+                            batch,
+                        })
+                        .await;
                     if response.request_id != *serial.borrow() {
                         return;
                     }
-                    let error = match search::merge_exact(&mut values.borrow_mut(), response.values)
-                    {
-                        Ok(()) => {
-                            // Retrying an incomplete root on every revision would loop forever.
-                            if response.problem.is_none() {
-                                attempted.borrow_mut().clear();
-                            }
-                            response.problem
+                    let status =
+                        match search::merge_exact(&mut values.borrow_mut(), response.values) {
+                            Ok(()) => response.status,
+                            Err(_) => TaskStatus::Failed(
+                                "Conflicting evaluation results; please reload.".into(),
+                            ),
+                        };
+                    match status {
+                        TaskStatus::Complete => {
+                            attempts.borrow_mut().remove(&key);
+                            paused.borrow_mut().remove(&key);
                         }
-                        Err(_) => {
-                            Some("Conflicting evaluation results; please reload.".to_string())
+                        TaskStatus::Continuing => {
+                            paused.borrow_mut().remove(&key);
                         }
-                    };
+                        TaskStatus::Paused { reason, can_resume } => {
+                            paused.borrow_mut().insert(key, (reason, can_resume));
+                        }
+                        TaskStatus::Failed(message) => {
+                            paused.borrow_mut().insert(key, (message, false));
+                        }
+                    }
                     if values.borrow().len() > 500_000 {
                         let mut keep = precomputed();
                         let current = values.borrow();
@@ -115,9 +132,6 @@ pub fn evaluation_provider(props: &EvaluationProviderProps) -> Html {
                         drop(current);
                         *values.borrow_mut() = keep;
                     }
-                    if let Some(message) = error {
-                        problem.set(Some((key, message)));
-                    }
                     revision.set(*revision + 1);
                     running.set(None);
                 });
@@ -125,20 +139,50 @@ pub fn evaluation_provider(props: &EvaluationProviderProps) -> Html {
             || ()
         });
     }
+    let problem = paused
+        .borrow()
+        .get(&key)
+        .map(|(message, can_resume)| (key, message.clone(), *can_resume));
     let context = EvaluationContext {
         values,
         revision: *revision,
         running: *running,
-        problem: (*problem).clone(),
+        problem: problem.clone(),
     };
     let message = problem
         .as_ref()
-        .filter(|(k, _)| *k == key)
-        .map(|(_, message)| message.clone());
+        .filter(|(k, _, _)| *k == key && missing)
+        .cloned();
+    let batch_number = attempts.borrow().get(&key).copied().unwrap_or(0);
+    let resume = {
+        let attempts = attempts.clone();
+        let paused = paused.clone();
+        let revision = revision.clone();
+        Callback::from(move |_| {
+            // A new work allowance also raises the retained-position budget.
+            let next = *attempts.borrow().get(&key).unwrap_or(&0);
+            attempts
+                .borrow_mut()
+                .insert(key, next.div_ceil(AUTOMATIC_BATCHES) * AUTOMATIC_BATCHES);
+            paused.borrow_mut().remove(&key);
+            revision.set(*revision + 1);
+        })
+    };
     html! {
         <ContextProvider<EvaluationContext> context={context}>
             { for props.children.iter() }
-            if let Some(message) = message { <p role="status">{message}</p> }
+            if missing && *running == Some(key) {
+                <p role="status">{ format!("Calculating… batch {batch_number}.") }</p>
+            } else if let Some((_, message, can_resume)) = message {
+                <div class="search-status" role="status">
+                    <p>{message}</p>
+                    if can_resume {
+                        <button type="button" class="control-button" onclick={resume} disabled={running.is_some()}>{"Continue search"}</button>
+                    }
+                </div>
+            } else if missing && running.is_some() {
+                <p role="status">{"Queued; waiting for the current search batch."}</p>
+            }
         </ContextProvider<EvaluationContext>>
     }
 }

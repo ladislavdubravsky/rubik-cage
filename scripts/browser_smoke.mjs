@@ -39,8 +39,8 @@ try {
     if (r.exceptionDetails) throw new Error(JSON.stringify(r.exceptionDetails));
     return r.result.value;
   };
-  const wait = async (expression, message) => {
-    for (let i = 0; i < 300; i++) { if (await js(expression)) return; await delay(100); }
+  const wait = async (expression, message, iterations = 300) => {
+    for (let i = 0; i < iterations; i++) { if (await js(expression)) return; await delay(100); }
     throw new Error(`Timeout: ${message}`);
   };
   await call('Runtime.enable'); await call('Page.enable');
@@ -92,7 +92,7 @@ try {
   for (const move of ['Flip:', 'Rotate Down CW:', 'Rotate Up CCW:']) {
     await clickMove(move);
     await wait("document.querySelector('.active-turn .move-list li')?.textContent.endsWith('Win in 11')", 'P2 wins after an empty-board move');
-    assert((await rows()).every(r => !/Unknown|Calculating/.test(r)));
+    assert((await rows()).every(r => !/Unknown|Calculating|Queued/.test(r)));
     await clickButton('Undo last move');
     await delay(80);
     assert.deepEqual(await rows(), opening);
@@ -144,7 +144,7 @@ try {
   await importPosition(legacy(3, 2));
   await clickMove('Drop at 0,0:');
   await clickButton('Undo last move');
-  await wait('!!document.querySelector(".active-turn .move-list li") && [...document.querySelectorAll(".active-turn .move-list li")].every(e => !/Unknown|Calculating/.test(e.textContent))', 'worker completion after move and undo');
+  await wait('!!document.querySelector(".active-turn .move-list li") && [...document.querySelectorAll(".active-turn .move-list li")].every(e => !/Unknown|Calculating|Queued/.test(e.textContent))', 'worker completion after move and undo');
   assert((await rows()).some(r => r.endsWith('Draw')));
   assert.equal(workers.size, 1, 'worker reused across positions and imports');
   await clickButton('Restart the game'); await delay(80);
@@ -178,11 +178,27 @@ try {
   await clickButton('Cancel'); await delay(50);
   assert(await js('document.body.innerText.includes("Draw: both players have a line.")'), 'cancel leaves the game intact');
 
+  await chooseGame(3, 3);
+  await wait('document.querySelectorAll(".active-turn .move-list li").length === 15 && [...document.querySelectorAll(".active-turn .move-list li")].every(e => e.textContent.endsWith("Draw"))', '3,3 opening including all flips and rotations');
+  await clickMove('Flip:');
+  await wait('[...document.querySelectorAll(".active-turn .move-list li")].length > 0 && [...document.querySelectorAll(".active-turn .move-list li")].every(e => e.textContent.endsWith("Draw"))', 'player-swapped 3,3 opening');
+  await clickButton('Undo last move'); await delay(80);
+  assert((await rows()).every(r => r.endsWith('Draw')));
+
   await chooseGame(0, 0);
   await wait('[...document.querySelectorAll(".active-turn .move-list li")].length === 7 && [...document.querySelectorAll(".active-turn .move-list li")].every(e => e.textContent.endsWith("Draw"))', 'zero-cubie game solved on demand');
   await chooseGame(5, 4);
   await wait('document.body.innerText.includes("Calculating")', 'custom game starts background evaluation');
-  await chooseGame(3, 0); // Switch inventory while the preceding request is still running.
+  await wait('document.body.innerText.includes("Calculating… batch 2")', 'automatic continuation after the first batch');
+  await wait('document.body.innerText.includes("Search paused after its work budget")', 'bounded search pauses visibly', 600);
+  assert((await rows()).some(r => r.includes('Unknown (search paused)')));
+  assert(await js('[...document.querySelectorAll("button")].some(b => b.textContent === "Continue search")'));
+  await chooseGame(12, 12);
+  await chooseGame(5, 4);
+  assert(await js('document.body.innerText.includes("Search paused")'), 'pause and resume controls survive changing games');
+  await clickButton('Continue search');
+  await wait('document.body.innerText.includes("Calculating… batch 9")', 'explicit continuation advances the budget');
+  await chooseGame(3, 0); // Switch inventory while the resumed request is still running.
   await wait('document.querySelector(".active-turn .move-list li")?.textContent.endsWith("Win in 5")', 'new inventory evaluated after a pending request');
   assert.equal(await js('document.querySelectorAll(".player-panel:last-child .cubie-icon").length'), 0);
   await clickMove('Drop at 0,0:');
@@ -198,7 +214,7 @@ try {
   assert.deepEqual(await rows(), opening, 'returning to standard size reuses the standard table');
   assert.equal(workers.size, 1, 'settings reuse the existing worker');
   assert.deepEqual(exceptions, [], 'browser runtime exceptions');
-  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw, custom settings and inventory switching');
+  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw, custom settings, complete 3,3 opening, player-swap reuse, automatic and explicit continuation, inventory switching');
 } finally {
   ws?.close();
   const exited = chrome.exitCode !== null ? Promise.resolve() : new Promise(resolve => chrome.once('exit', resolve));

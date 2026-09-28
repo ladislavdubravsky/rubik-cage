@@ -22,6 +22,16 @@ pub enum Evaluation {
 }
 
 impl Evaluation {
+    pub fn swapped_players(self) -> Self {
+        match self {
+            Self::Win { winner, plies } => Self::Win {
+                winner: 1 - winner,
+                plies,
+            },
+            Self::Draw => Self::Draw,
+        }
+    }
+
     pub fn terminal(state: &GameState) -> Option<Self> {
         state.outcome().map(|outcome| match outcome {
             Outcome::Win(winner) => Self::Win { winner, plies: 0 },
@@ -57,4 +67,27 @@ pub fn merge_exact(target: &mut EvaluationMap, incoming: EvaluationMap) -> Resul
     }
     target.extend(incoming);
     Ok(())
+}
+
+/// Reuse exact results under player relabeling, including unequal inventories.
+/// The full key swaps reserves, board ownership and turn together.
+pub fn lookup_exact(values: &EvaluationMap, state: &GameState) -> Option<Evaluation> {
+    Evaluation::terminal(state).or_else(|| {
+        let key = state.position_key();
+        values.get(&key).copied().or_else(|| {
+            values
+                .get(&key.swapped_players())
+                .copied()
+                .map(Evaluation::swapped_players)
+        })
+    })
+}
+
+pub fn include_player_swaps(mut values: EvaluationMap) -> Result<EvaluationMap, String> {
+    let swapped = values
+        .iter()
+        .map(|(&k, &v)| (k.swapped_players(), v.swapped_players()))
+        .collect();
+    merge_exact(&mut values, swapped)?;
+    Ok(values)
 }
