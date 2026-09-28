@@ -30,11 +30,13 @@ The larger-game optimizer now proves `(12,12)` as P1 win in 11 plies using finit
 
 Native graph defaults remain 100,000 states / 1,500,000 edges. The browser combines horizon search (1,000,000 calls per request, 250,000 retained bounds, horizon 18) with graph fallback (20,000 states / 300,000 edges). These bound work and retained records, not exact allocator bytes or elapsed time. Exact caches are trimmed at 500,000 entries, preserving the shipped opening data and the current UI move values. Incomplete responses can publish proved values while leaving other moves unknown; they do not trigger an automatic retry loop.
 
+The compact Game settings panel starts games with 0–12 cubies per player, clears history, and closes on submit. Custom games use the shared worker, including runtime safety closure for draws, without additional precomputed files. Restart preserves the selected inventories.
+
 Full enumeration of the `(12,12)` graph and layer/component decomposition remain optional future optimizations. The opening's outcome is now proved, independently of those larger exhaustive computations.
 
 **Validation**
 
-Native regression suite: all 40 tests passed, including all library, binary, and example targets. Both release WASM entry points build successfully. The headless Chrome smoke test passed: the original replay, the optimal 11-ply `(12,12)` game with every losing reply checked, the full optimal 9-ply `(3,1)` game, all 15 opening labels and an edge-drop draw, one reused worker, fresh `(3,2)` solving, legacy import, undo/restart, and simultaneous draws.
+Native regression suite: all 41 tests passed, including all library, binary, and example targets. Both release WASM entry points build successfully. The headless Chrome smoke test passed: the original replay, the optimal 11-ply `(12,12)` game with every losing reply checked, the full optimal 9-ply `(3,1)` game, all 15 opening labels and an edge-drop draw, one reused worker, fresh `(3,2)` solving, legacy import, undo/restart, simultaneous draws, custom-size input validation, and changing inventories during worker activity.
 
 The browser was served from WASM bindings generated with `wasm-bindgen-cli 0.2.100` (matching Cargo.lock); Trunk itself was not installed in this environment. The smoke script also supports a normal Trunk-served build.
 

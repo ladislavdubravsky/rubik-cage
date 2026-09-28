@@ -154,8 +154,51 @@ try {
   await wait('document.body.innerText.includes("Draw: both players have a line.")', 'simultaneous-line terminal');
   assert.equal((await rows()).length, 0);
   assert(await js('[...document.querySelectorAll(".cage > button, .layer button")].every(e => e.disabled)'));
+  // Settings stay collapsed until requested and can start a game from a terminal board.
+  assert.equal(await js('!!document.querySelector("#game-settings-panel")'), false);
+  const settingsInput = async (player, value) => {
+    await js(`(() => { const e = document.querySelector('[name="p${player}-cubies"]'); e.value = ${JSON.stringify(String(value))}; e.dispatchEvent(new Event('input', {bubbles:true})); })()`);
+    await delay(30);
+  };
+  const chooseGame = async (m, n) => {
+    await clickButton('Game settings'); await delay(50);
+    await settingsInput(1, m); await settingsInput(2, n);
+    await clickButton('Start new game'); await delay(60);
+    assert.equal(await js('!!document.querySelector("#game-settings-panel")'), false);
+    assert.equal(await js('document.querySelectorAll(".player-panel:first-child .cubie-icon").length'), m);
+    assert.equal(await js('document.querySelectorAll(".player-panel:last-child .cubie-icon").length'), n);
+    assert(await js('[...document.querySelectorAll("button")].find(b => b.textContent === "Undo last move").disabled'));
+    assert(await js('document.querySelector(".player-panel:first-child").classList.contains("active-turn")'));
+  };
+  await clickButton('Game settings'); await delay(50);
+  for (const invalid of [13, -1, 2.5, '']) {
+    await settingsInput(1, invalid);
+    assert(await js('document.querySelector("#game-settings-panel button[type=submit]").disabled'));
+  }
+  await clickButton('Cancel'); await delay(50);
+  assert(await js('document.body.innerText.includes("Draw: both players have a line.")'), 'cancel leaves the game intact');
+
+  await chooseGame(0, 0);
+  await wait('[...document.querySelectorAll(".active-turn .move-list li")].length === 7 && [...document.querySelectorAll(".active-turn .move-list li")].every(e => e.textContent.endsWith("Draw"))', 'zero-cubie game solved on demand');
+  await chooseGame(5, 4);
+  await wait('document.body.innerText.includes("Calculating")', 'custom game starts background evaluation');
+  await chooseGame(3, 0); // Switch inventory while the preceding request is still running.
+  await wait('document.querySelector(".active-turn .move-list li")?.textContent.endsWith("Win in 5")', 'new inventory evaluated after a pending request');
+  assert.equal(await js('document.querySelectorAll(".player-panel:last-child .cubie-icon").length'), 0);
+  await clickMove('Drop at 0,0:');
+  await clickButton('Game settings'); await delay(50);
+  assert.equal(await js(`document.querySelector('[name="p1-cubies"]').value`), '3', 'settings show starting stocks, not remaining pieces');
+  await clickButton('Cancel'); await delay(50);
+  assert.equal(await js('document.querySelectorAll(".player-panel:first-child .cubie-icon").length'), 2);
+  await clickButton('Restart the game'); await delay(60);
+  assert.equal(await js('document.querySelectorAll(".player-panel:first-child .cubie-icon").length'), 3);
+  assert.equal(await js('document.querySelectorAll(".player-panel:last-child .cubie-icon").length'), 0);
+
+  await chooseGame(12, 12);
+  assert.deepEqual(await rows(), opening, 'returning to standard size reuses the standard table');
+  assert.equal(workers.size, 1, 'settings reuse the existing worker');
   assert.deepEqual(exceptions, [], 'browser runtime exceptions');
-  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw');
+  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw, custom settings and inventory switching');
 } finally {
   ws?.close();
   const exited = chrome.exitCode !== null ? Promise.resolve() : new Promise(resolve => chrome.once('exit', resolve));

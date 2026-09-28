@@ -1,5 +1,5 @@
 use crate::{
-    app::utils::RELOAD_FLAG_KEY,
+    app::{game_settings::GameSettings, utils::RELOAD_FLAG_KEY},
     core::{game::GameState, snapshot},
 };
 use web_sys::{
@@ -115,6 +115,7 @@ pub fn game_control(props: &GameControlProps) -> Html {
             <button class="control-button" onclick={restart}>{ "Restart the game" }</button>
             <button class="control-button" onclick={export}>{ "Export position" }</button>
             <button class="control-button" onclick={import}>{ "Import position" }</button>
+            <GameSettings game_state={props.game_state.clone()} history={props.history.clone()} />
         </div>
     }
 }

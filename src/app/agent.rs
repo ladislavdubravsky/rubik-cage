@@ -76,6 +76,9 @@ fn evaluate(
                 }
             }
         }
+        // Custom inventories have no bundled table: certify closed draw strategies
+        // from the explored positions as well as finite-horizon wins.
+        search.proof.close_safety();
         search::merge_exact(&mut incoming, search.proof.exact_values())?;
         search::merge_exact(known, incoming.clone())?;
     }
@@ -148,7 +151,7 @@ mod tests {
         let root = GameState::new(12, 12);
         let mut known = EvaluationMap::new();
         let mut retained = None;
-        let (values, complete) = evaluate(&root, &mut known, &mut retained).unwrap();
+        let (values, _) = evaluate(&root, &mut known, &mut retained).unwrap();
         assert_eq!(
             values[&root.position_key()],
             Evaluation::Win {
@@ -156,7 +159,6 @@ mod tests {
                 plies: 11
             }
         );
-        assert!(!complete); // Edge drops still require a deeper proof or a complete graph.
         retained.as_ref().unwrap().proof.verify().unwrap();
         let other = GameState::new(4, 2);
         evaluate(&other, &mut known, &mut retained).unwrap();
@@ -170,5 +172,24 @@ mod tests {
             known[&GameState::new(3, 2).position_key()],
             Evaluation::Draw
         );
+    }
+    #[test]
+    fn custom_inventory_results_match_complete_graphs_without_assets() {
+        let mut known = EvaluationMap::new();
+        let mut retained = None;
+        for (m, n) in [(0, 0), (3, 0), (0, 3), (1, 1), (3, 2)] {
+            let state = GameState::new(m, n);
+            let reference =
+                retrograde::solve(&state, &EvaluationMap::new(), Limits::default()).unwrap();
+            let (values, complete) = evaluate(&state, &mut known, &mut retained).unwrap();
+            assert!(complete, "Unsolved small custom game {m},{n}");
+            for (key, value) in values {
+                assert_eq!(reference.values[&key], value);
+            }
+            assert_eq!(
+                known[&state.position_key()],
+                reference.values[&state.position_key()]
+            );
+        }
     }
 }

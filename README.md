@@ -32,6 +32,12 @@ trunk build --release
 
 or `trunk serve` to serve with hot reloading.
 
+### Choosing a game size
+
+Click **Game settings** beneath the board to choose 0–12 starting cubies independently for each player. **Start new game** clears the board and undo history, gives P1 the first turn, and closes the panel. **Cancel** leaves the game unchanged; restarting preserves the chosen sizes.
+
+Custom sizes are evaluated on demand by the shared background worker, including checks for proved draws. Results are reused in memory under inventory-specific keys; no additional precomputed files are needed. Larger positions can still show Unknown when the search budget is exhausted. The standard `(12,12)` opening keeps its bundled exact evaluations.
+
 ### Precomputing evaluations
 
 [eval-v1.bin](./assets/eval-v1.bin) contains **122,727 exact `(12,12)` evaluations**, with an independently checkable [proof](./assets/eval-v1.proof.bin). This is a subset: it includes every initial move, the opening winning strategy, and many alternatives; missing entries remain unknown. The browser also loads a complete `(3,1)` table from [eval-3-1.bin](./assets/eval-3-1.bin).
@@ -78,6 +84,6 @@ cargo run --release --example audit_search -- 3 1
 cargo build --release --target wasm32-unknown-unknown --bin app --bin worker
 ```
 
-For the browser regression, serve a Trunk build and run `node scripts/browser_smoke.mjs http://127.0.0.1:8080/rubik-cage/` (Node 22+ and Google Chrome; `CHROME` can select another Chromium binary). This exercises worker reuse, the original move sequence, optimal 11-ply `(12,12)` and 9-ply `(3,1)` games, all opening labels and an edge-drop draw, saved-position import, undo/restart, and simultaneous-line termination.
+For the browser regression, serve a Trunk build and run `node scripts/browser_smoke.mjs http://127.0.0.1:8080/rubik-cage/` (Node 22+ and Google Chrome; `CHROME` can select another Chromium binary). This exercises worker reuse, the original move sequence, optimal 11-ply `(12,12)` and 9-ply `(3,1)` games, all opening labels and an edge-drop draw, saved-position import, undo/restart, simultaneous-line termination, and custom-size validation and switching during evaluation.
 
 See [the investigation](docs/search-investigation.md), [redesign plan](docs/search-redesign-plan.md), and [implementation notes](docs/search-implementation.md).
