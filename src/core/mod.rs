@@ -4,3 +4,7 @@ pub mod game;
 pub mod line;
 pub mod r#move;
 pub mod zobrist;
+
+pub mod position;
+
+pub mod snapshot;

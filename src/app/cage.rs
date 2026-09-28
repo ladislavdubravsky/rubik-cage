@@ -5,7 +5,7 @@ use crate::{
         utils::{apply_move_callback, slot_to_css},
     },
     core::{
-        game::GameState,
+        game::{GameState, Outcome},
         r#move::{Layer, Move, Rotation},
     },
 };
@@ -30,7 +30,7 @@ pub fn cage(props: &CageProps) -> Html {
         .map_or(false, |h| h.as_ref() == &Move::Flip);
 
     let won = props.game_state.won();
-    let game_frozen = won.is_some();
+    let game_frozen = props.game_state.outcome().is_some();
     let apply_move = apply_move_callback(
         game_state_handle.clone(),
         history_handle.clone(),
@@ -81,7 +81,7 @@ pub fn cage(props: &CageProps) -> Html {
                                     color: player_to_move_color.clone(),
                                     column: (i / 3, i % 3),
                                 };
-                                let onclick = if z == 0 && i != 4 && cubie.is_none() && !game_frozen {
+                                let onclick = if z == 0 && i != 4 && cubie.is_none() && !game_frozen && props.game_state.remaining_cubies[props.game_state.player_to_move.id as usize] > 0 {
                                     Some(apply_move.reform(move |_| drop_move.clone()))
                                 } else {
                                     None
@@ -105,7 +105,7 @@ pub fn cage(props: &CageProps) -> Html {
                                         style={format!("--slot-color: {color}; --highlight-color: {highlight_color}; --slot-opacity: {slot_opacity};")}
                                         onclick={onclick}
                                         onmouseenter={
-                                            if z == 0 && i != 4 && cubie.is_none() && !game_frozen {
+                                            if z == 0 && i != 4 && cubie.is_none() && !game_frozen && props.game_state.remaining_cubies[props.game_state.player_to_move.id as usize] > 0 {
                                                 let set_hovered_move = set_hovered_move.clone();
                                                 let drop_move = Rc::new(drop_move.clone());
                                                 Some(move |_| set_hovered_move.emit(Some(drop_move.clone())))
@@ -114,7 +114,7 @@ pub fn cage(props: &CageProps) -> Html {
                                             }
                                         }
                                         onmouseleave={
-                                            if z == 0 && i != 4 && cubie.is_none() && !game_frozen {
+                                            if z == 0 && i != 4 && cubie.is_none() && !game_frozen && props.game_state.remaining_cubies[props.game_state.player_to_move.id as usize] > 0 {
                                                 let set_hovered_move = set_hovered_move.clone();
                                                 Some(move |_| set_hovered_move.emit(None))
                                             } else {
@@ -164,6 +164,8 @@ pub fn cage(props: &CageProps) -> Html {
             {
                 if let Some((winner, _)) = won {
                     html! { <h2 style="text-align: center;">{ format!("{} won!", winner.color) }</h2> }
+                } else if props.game_state.outcome() == Some(Outcome::Draw) {
+                    html! { <h2>{ "Draw: both players have a line." }</h2> }
                 } else {
                     html! {}
                 }

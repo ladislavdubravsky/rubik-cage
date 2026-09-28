@@ -18,9 +18,9 @@ For now we only consider two players, and each has cubies of one color only. If 
 - rotate one of the layers 90 degrees clockwise or counter-clockwise
 - flip the cage upside down
 
-A player cannot undo the opponent's immediate previous move.
+A player cannot undo the opponent's immediate previous move. Empty-layer rotations and other moves that leave the board unchanged are still legal and update this restriction. A move producing lines for both players is a draw; indefinite play is also evaluated as a draw.
 
-We solved all `(m, n)` games for the cage. For example, a game of particular interest is the `(12, 12)` game (the cage has 24 available slots), which is a win for player 1 in 8 moves or less of optimal play.
+The exact solver uses retrograde analysis of the finite game graph, including the previous-move restriction. Small games are verified against an independent fixed-point solver. The previous claims about solving every inventory, including `(12,12)`, came from an unsound search and are withdrawn. Under the corrected rules, `(3,1)` is a P1 win in 9 plies and `(3,2)` is drawn. A ply is one player's move.
 
 ## Webapp build
 
@@ -34,22 +34,31 @@ or `trunk serve` to serve with hot reloading.
 
 ### Precomputing evaluations
 
-[eval.bin](./assets/eval.bin) contains several MB of most useful precomputed evaluations for the `(12, 12)` game, with optimal numbers of moves to win/loss. This enables the webapp to display evaluations immediately. As the user reaches some remaining unevaluated positions in a game, these are fast enough to be computed on the fly in background web workers.
+[eval-v1.bin](./assets/eval-v1.bin) is a verified complete `(3,1)` table containing 2,668 exact positions. Keys include the board, turn, inventories, colors and the immediate-undo restriction, canonicalized together. The format records rules, key and solver versions and distinguishes complete from filtered tables. The old `assets/eval.bin` is retained only as a rejected legacy regression fixture; it is never loaded by the app.
 
-If you want to change how many precomputed evaluations are stored in the webapp binary, first run:
+Generate, independently verify, then optionally filter a table:
 
-```
-cargo run --release --bin evaluator evaluate 12 12 "eval_12_12_full.bin"
-```
-
-This calculates evaluations for all reachable `(12, 12)` game states and stores them (1.2 GB). Then:
-
-```
-cargo run --release --bin evaluator filter "eval_12_12_full.bin" "assets/eval.bin" <min_moves_to_wl>
+```sh
+cargo run --release --bin evaluator -- evaluate 3 1 assets/eval-v1.bin
+cargo run --release --bin evaluator -- verify assets/eval-v1.bin
+cargo run --release --bin evaluator -- filter assets/eval-v1.bin /tmp/eval-subset.bin 3
 ```
 
-which will filter for evaluations that take at least `min_moves_to_wl` to win/lose under optimal play. Alternatively, treat [`evaluator.rs`](./src/bin/evaluator.rs) as a scripting space and define your own logic.
+Native searches default to 100,000 states and 1,500,000 edges. Override these with `--max-states` and `--max-edges` on `evaluate`. Reaching a limit returns an error and writes no table. Filtering preserves metadata; missing entries mean unknown. Full minimax verification of a subset requires its complete source table.
+
+The browser retains the `(12,12)` starting game, but its initial evaluation is currently **unknown**: each background request is bounded to 20,000 states and 300,000 edges. The app displays exact results only after a complete solve (or a compatible cache hit); exceeding the budget never becomes a draw. Larger precomputation and graph-storage/component optimizations remain future work. A single shared worker reuses exact results between requests.
+
+Move-row distances include the selected move: an immediate win displays “Win in 1.” Imported legacy positions are validated and their derived identity is rebuilt; newly exported positions use a versioned format. Restart preserves the imported game's initial inventories and colors.
 
 ## Playing with core logic
 
-Run `cargo test` for core logic tests; explore and modify the tests to e.g. evaluate positions by searching the game tree, or play with the evaluator crate as a scripting pad.
+Run `cargo test --all-targets` for model, symmetry, graph, cache and migration tests. The production solver is in `src/search/retrograde.rs`; historical `naive.rs` is not compiled.
+
+```sh
+cargo run --release --example audit_search -- 3 1
+cargo build --release --target wasm32-unknown-unknown --bin app --bin worker
+```
+
+For the browser regression, serve a Trunk build and run `node scripts/browser_smoke.mjs http://127.0.0.1:8080/rubik-cage/` (Node 22+ and Google Chrome; `CHROME` can select another Chromium binary). This exercises worker reuse, the original move sequence, an optimal 9-ply game, unknown results at limits, saved-position import, undo/restart, and simultaneous-line termination.
+
+See [the investigation](docs/search-investigation.md), [redesign plan](docs/search-redesign-plan.md), and [implementation notes](docs/search-implementation.md).

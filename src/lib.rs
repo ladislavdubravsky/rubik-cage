@@ -4,13 +4,12 @@ pub mod search;
 
 use crate::{
     app::utils::{self, RELOAD_FLAG_KEY, STORAGE_KEY},
-    core::game::GameState,
-    search::naive::Evaluation,
+    core::{game::GameState, snapshot},
 };
 use app::{
-    agent::EvaluationTask, cage::Cage, hovered_move::HoveredMoveProvider, player::PlayerPanel,
+    agent::EvaluationTask, cage::Cage, evaluation::EvaluationProvider,
+    hovered_move::HoveredMoveProvider, player::PlayerPanel,
 };
-use std::collections::HashMap;
 use web_sys::window;
 use yew::prelude::*;
 use yew_agent::oneshot::OneshotProvider;
@@ -24,10 +23,7 @@ pub fn app() -> Html {
                     storage.remove_item(RELOAD_FLAG_KEY).ok();
                     if let Ok(Some(hex)) = storage.get_item(STORAGE_KEY) {
                         if let Some(bytes) = utils::hex_to_bytes(&hex) {
-                            if let Ok((state, _)) = bincode::decode_from_slice::<GameState, _>(
-                                &bytes,
-                                bincode::config::standard(),
-                            ) {
+                            if let Ok(state) = snapshot::decode(&bytes) {
                                 return state;
                             }
                         }
@@ -39,21 +35,11 @@ pub fn app() -> Html {
     });
     let history = use_state(|| Vec::new());
 
-    // Load precomputed evaluations for hardest-to-compute positions.
-    // Evaluations for further positions will be calculated on the fly when needed.
-    let eval = use_mut_ref(|| {
-        const EVAL_BIN: &[u8] = include_bytes!("../assets/eval.bin");
-        let config = bincode::config::standard();
-        let (map, _len): (HashMap<u64, Evaluation>, usize) =
-            bincode::decode_from_slice(EVAL_BIN, config).unwrap();
-        map
-    });
-
     // Save game state to LocalStorage on any change
     {
         let game_state = game_state.clone();
         use_effect_with(game_state.clone(), move |gs| {
-            let bin = bincode::encode_to_vec(&**gs, bincode::config::standard()).unwrap();
+            let bin = snapshot::encode(gs).unwrap();
             let hex = utils::bytes_to_hex(&bin);
             if let Some(storage) = window().and_then(|w| w.local_storage().ok().flatten()) {
                 storage.set_item(STORAGE_KEY, &hex).ok();
@@ -73,23 +59,23 @@ pub fn app() -> Html {
                 { " 🦀" }
             </p>
             <OneshotProvider<EvaluationTask> path="/rubik-cage/worker.js">
+                <EvaluationProvider state={game_state.clone()}>
                 <HoveredMoveProvider>
                     <div class="game-area">
                         <PlayerPanel
                             game_state={game_state.clone()}
                             player={game_state.players[0]}
                             history={history.clone()}
-                            eval={eval.clone()}
                         />
                         <Cage game_state={game_state.clone()} history={history.clone()} />
                         <PlayerPanel
                             game_state={game_state.clone()}
                             player={game_state.players[1]}
                             history={history.clone()}
-                            eval={eval.clone()}
                         />
                     </div>
                 </HoveredMoveProvider>
+                </EvaluationProvider>
             </OneshotProvider<EvaluationTask>>
         </div>
     }

@@ -1,5 +1,7 @@
-use crate::{app::utils::RELOAD_FLAG_KEY, core::game::GameState};
-use bincode::{decode_from_slice, encode_to_vec};
+use crate::{
+    app::utils::RELOAD_FLAG_KEY,
+    core::{game::GameState, snapshot},
+};
 use web_sys::{
     HtmlInputElement, Url, js_sys,
     wasm_bindgen::{JsCast, prelude::Closure},
@@ -27,7 +29,19 @@ pub fn game_control(props: &GameControlProps) -> Html {
     let game_state_handle = props.game_state.clone();
     let history_handle = props.history.clone();
     let restart = Callback::from(move |_| {
-        game_state_handle.set(GameState::new(12, 12));
+        let mut initial = *game_state_handle;
+        for column in initial.cage.grid.iter().flatten() {
+            for color in column.iter().flatten() {
+                if let Some(id) = initial.players.iter().position(|p| p.color == *color) {
+                    initial.remaining_cubies[id] += 1;
+                }
+            }
+        }
+        initial.cage = crate::core::cage::Cage::new();
+        initial.player_to_move = initial.players[0];
+        initial.last_move = None;
+        initial.zobrist_hash = 0;
+        game_state_handle.set(initial);
         history_handle.set(Vec::new());
     });
 
@@ -38,7 +52,7 @@ pub fn game_control(props: &GameControlProps) -> Html {
             storage.set_item(RELOAD_FLAG_KEY, "true").ok();
         }
         let state = &*game_state_handle;
-        let bin = encode_to_vec(state, bincode::config::standard()).unwrap();
+        let bin = snapshot::encode(state).unwrap();
         let uint8_array = js_sys::Uint8Array::from(bin.as_slice());
         let blob =
             web_sys::Blob::new_with_u8_array_sequence(&js_sys::Array::of1(&uint8_array)).unwrap();
@@ -75,9 +89,7 @@ pub fn game_control(props: &GameControlProps) -> Html {
                         let array = js_sys::Uint8Array::new(&result);
                         let mut vec = vec![0u8; array.length() as usize];
                         array.copy_to(&mut vec[..]);
-                        if let Ok((state, _)) =
-                            decode_from_slice::<GameState, _>(&vec, bincode::config::standard())
-                        {
+                        if let Ok(state) = snapshot::decode(&vec) {
                             game_state_handle.set(state);
                             history_handle.set(Vec::new());
                         } else {

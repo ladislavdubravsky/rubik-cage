@@ -1,40 +1,32 @@
 use crate::{
     app::{
-        agent::{EvaluationTask, EvaluationTaskSpec},
+        evaluation::EvaluationContext,
         hovered_move::use_hovered_move,
         utils::{self, apply_move_callback},
     },
     core::game::{GameState, Player},
-    search::naive::{Evaluation, SearchMode},
+    search::Evaluation,
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::rc::Rc;
 use web_sys::window;
-use yew::{platform::spawn_local, prelude::*, use_effect_with};
-use yew_agent::oneshot::use_oneshot_runner;
+use yew::prelude::*;
 
 #[derive(Properties, PartialEq)]
 pub struct PlayerPanelProps {
     pub player: Player,
     pub game_state: UseStateHandle<GameState>,
     pub history: UseStateHandle<Vec<GameState>>,
-    pub eval: Rc<RefCell<HashMap<u64, Evaluation>>>,
 }
 
-fn eval_to_string(eval: Option<&Evaluation>, player_id: u8) -> String {
-    if eval.is_none() {
-        return "Calculating...".to_string();
-    }
-    let Evaluation {
-        score,
-        moves_to_wl: moves_to_win,
-    } = eval.unwrap();
-    match (score, player_id) {
-        (1, 0) => format!("Win in {}", moves_to_win),
-        (1, 1) => format!("Loss in {}", moves_to_win),
-        (-1, 0) => format!("Loss in {}", moves_to_win),
-        (-1, 1) => format!("Win in {}", moves_to_win),
-        (0, _) => "Draw".to_string(),
-        ev => format!("Unexpected evaluation: {:?}", ev),
+pub(crate) fn eval_to_string(eval: Option<Evaluation>, player_id: u8, unknown: &str) -> String {
+    match eval {
+        Some(Evaluation::Win { winner, plies }) => format!(
+            "{} in {}",
+            if winner == player_id { "Win" } else { "Loss" },
+            u64::from(plies) + 1
+        ),
+        Some(Evaluation::Draw) => "Draw".into(),
+        None => unknown.into(),
     }
 }
 
@@ -52,9 +44,9 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
             .map(|v| v == "true")
             .unwrap_or(false)
     });
-    let eval = props.eval.clone();
+    let eval = use_context::<EvaluationContext>().expect("EvaluationProvider");
 
-    let is_won = props.game_state.won().is_some();
+    let is_won = props.game_state.outcome().is_some();
     let apply_move = apply_move_callback(props.game_state.clone(), props.history.clone(), is_won);
 
     let cubies = (0..props.game_state.remaining_cubies[props.player.id as usize]).map(|i| {
@@ -65,50 +57,12 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
 
     let highlight_color = utils::slot_to_css(Some(props.player.color));
 
-    let moves = if props.game_state.won().is_some() {
+    let moves = if props.game_state.outcome().is_some() {
         Vec::new() // Don't show further moves if game is finished
     } else {
         utils::sort_moves_by_evaluation(props.game_state.legal_moves(), &props.game_state, &eval)
     };
     let (hovered_move, set_hovered_move) = use_hovered_move();
-
-    // The web worker evaluating missing (non-preloaded) game state evaluations runs with pruning.
-    // That avoids wasting time and calculating lots of positions we'll never need to see.
-    // But it also means we'll need to call it repeatedly for new unevaluated positions.
-    // We avoid the need to sync multiple workers by only allowing one to run at a time.
-    let agent_running = use_state(|| false);
-    let eval_task = use_oneshot_runner::<EvaluationTask>();
-    let game_state = props.game_state.clone();
-    use_effect_with(
-        (moves.clone(), eval.clone(), agent_running.clone()),
-        move |(moves, eval, agent_running)| {
-            if !*agent_running.clone() {
-                for mv in moves.iter() {
-                    let mut new_state = (*game_state).clone();
-                    new_state.apply_move_normalize(mv.clone()).unwrap();
-                    let hash = new_state.zobrist_hash;
-                    let eval_map = eval.borrow();
-                    if !eval_map.contains_key(&hash) {
-                        agent_running.set(true);
-                        let eval = eval.clone();
-                        let agent_running = agent_running.clone();
-                        spawn_local(async move {
-                            let spec = EvaluationTaskSpec {
-                                state: new_state,
-                                // this is fast by now, no need to give user choice to prune
-                                search_mode: SearchMode::OptimalWL,
-                            };
-                            let new_evals = eval_task.run(spec).await;
-                            eval.borrow_mut().extend(new_evals);
-                            agent_running.set(false);
-                        });
-                        break;
-                    }
-                }
-            }
-            || ()
-        },
-    );
 
     // Save move_list_visible to localStorage on change
     {
@@ -152,9 +106,7 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                             { for moves.iter().map(|mv| {
                                 let mut new_state = (*props.game_state).clone();
                                 new_state.apply_move_normalize(mv.clone()).unwrap();
-                                let eval_map = eval.borrow();
-                                let eval = eval_map.get(&new_state.zobrist_hash);
-                                let eval = eval_to_string(eval, props.game_state.player_to_move.id);
+                                let label = eval_to_string(eval.get(&new_state), props.game_state.player_to_move.id, eval.unknown_label(props.game_state.position_key()));
                                 let is_hovered = hovered_move.0.as_ref().map_or(false, |h| h.as_ref() == mv);
                                 let mv = mv.clone();
                                 html! {
@@ -172,7 +124,7 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                                             move |_| set_hovered_move.emit(None)
                                         }}
                                     >
-                                        { format!("{}: {}", mv, eval) }
+                                        { format!("{}: {}", mv, label) }
                                     </li>
                                 }
                             })}
@@ -183,5 +135,37 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                 }
             }
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn labels_include_the_selected_move() {
+        assert_eq!(
+            eval_to_string(
+                Some(Evaluation::Win {
+                    winner: 0,
+                    plies: 0
+                }),
+                0,
+                "Unknown"
+            ),
+            "Win in 1"
+        );
+        assert_eq!(
+            eval_to_string(
+                Some(Evaluation::Win {
+                    winner: 0,
+                    plies: 7
+                }),
+                1,
+                "Unknown"
+            ),
+            "Loss in 8"
+        );
+        assert_eq!(eval_to_string(Some(Evaluation::Draw), 0, "Unknown"), "Draw");
+        assert_eq!(eval_to_string(None, 0, "Unknown"), "Unknown");
     }
 }

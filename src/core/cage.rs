@@ -1,10 +1,10 @@
 use crate::core::{
     cubie::Cubie,
-    line::{Line, SLOT_TO_LINES},
+    line::{LINES, Line},
 };
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, str::FromStr};
+use std::str::FromStr;
 
 #[derive(
     Clone, Copy, Debug, Hash, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Encode, Decode,
@@ -39,21 +39,18 @@ impl Cage {
     /// Checks if there are 3 same color cubies in a row, column, or diagonal. Center column is not
     /// available!
     pub fn has_line(&self) -> Option<(Cubie, Line)> {
-        // TODO: use incrementally
-        let mut counts: HashMap<(Line, Cubie), u8> = HashMap::new();
+        self.lines().next()
+    }
 
-        for (slot, lines) in SLOT_TO_LINES.iter() {
-            if let Some(cubie) = self.grid[slot[0]][slot[1]][slot[2]] {
-                for &line in lines {
-                    *counts.entry((line, cubie)).or_insert(0) += 1;
-                    if counts[&(line, cubie)] == 3 {
-                        return Some((cubie, line)); // Found a line with 3 same color cubies
-                    }
-                }
-            }
-        }
-
-        None // No lines found
+    /// Deterministic line order; callers deciding an outcome must inspect both players.
+    pub fn lines(&self) -> impl Iterator<Item = (Cubie, Line)> + '_ {
+        LINES.iter().filter_map(|line| {
+            let [x, y, z] = line[0];
+            let color = self.grid[x][y][z]?;
+            line.iter()
+                .all(|&[x, y, z]| self.grid[x][y][z] == Some(color))
+                .then_some((color, *line))
+        })
     }
 
     /// This function is only used in normalizing the representation of the cage.
@@ -110,6 +107,9 @@ impl FromStr for Cage {
                 continue; // Skip human-readable formatting
             }
 
+            if idx >= 27 {
+                return Err("Too many slots".into());
+            }
             let x = idx % 3;
             let y = (idx / 3) % 3;
             let z = 2 - (idx / 9); // The cubies are input top (z=2) to bottom (z=0)
