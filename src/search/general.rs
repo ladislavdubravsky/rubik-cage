@@ -352,6 +352,15 @@ impl Search {
             return Err("General search namespace mismatch".into());
         }
         let root = state.position_key();
+        let full_board = state
+            .cage
+            .grid
+            .iter()
+            .flatten()
+            .flatten()
+            .filter(|cell| cell.is_some())
+            .count()
+            == 24;
         if self.root != Some(root) {
             let mut requested = children(root);
             if !requested.contains(&root) {
@@ -375,9 +384,12 @@ impl Search {
             }
             self.cursor = 0;
             self.root = Some(root);
-            // Exhaustive graphs are useful only for very small inventories.
+            // Full boards have no drops or gravity changes. Three independent
+            // quarter-turn layers and one flip give at most 4^3 * 2 boards;
+            // with turn and inverse restriction, at most 2,048 raw states.
             // The frontier survives interruptions and is never rebuilt on a cap.
-            self.graph = (self.totals.iter().map(|&n| usize::from(n)).sum::<usize>() <= 5)
+            self.graph = (self.totals.iter().map(|&n| usize::from(n)).sum::<usize>() <= 5
+                || full_board)
                 .then(|| super::general_graph::Graph::new(root, 4096, 65536));
         }
         let mut at_capacity = false;
@@ -399,7 +411,9 @@ impl Search {
                 at_capacity = true;
                 break;
             }
-            if i % 4 == 0
+            // For proven-small full boards, finish the graph directly. A full
+            // horizon-proof cache must not prevent this independent exact solve.
+            if (full_board || i % 4 == 0)
                 && let Some(graph) = self.graph.as_mut()
                 && graph.pending()
             {

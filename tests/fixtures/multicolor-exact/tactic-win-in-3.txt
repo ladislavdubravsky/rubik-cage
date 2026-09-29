@@ -1,0 +1,3 @@
+Starting inventory [4, 4, 4, 4, 4, 4]
+Moves [Drop { color: Blue, column: (2, 1) }, Drop { color: Orange, column: (2, 1) }, Drop { color: Blue, column: (2, 2) }, Drop { color: Yellow, column: (1, 0) }, Drop { color: Blue, column: (2, 1) }, Drop { color: Orange, column: (0, 0) }, Drop { color: Green, column: (0, 0) }, Drop { color: Red, column: (2, 0) }, Drop { color: Green, column: (0, 0) }, Drop { color: Red, column: (0, 1) }]
+Result P1-win-3

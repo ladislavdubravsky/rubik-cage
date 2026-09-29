@@ -332,6 +332,18 @@ try {
   await importPosition(multiPosition('WWW...RRR', [0,3,0,3,3,3]));
   assert(await js('document.body.innerText.includes("Draw: both players have a line.")'));
 
+  // A nontrivial tactic with four of each color and stock still in reserve.
+  await importPosition([...await readFile(new URL('../tests/fixtures/multicolor-exact/tactic-win-in-5.rcg', import.meta.url))]);
+  await wait('[...document.querySelectorAll(".active-turn .move-list li")].some(e => e.textContent.endsWith("Win in 5"))', 'four-each five-ply tactic');
+
+  // Four cubies of every color: full-board cycles have small complete graphs.
+  await importPosition([...await readFile(new URL('../tests/fixtures/multicolor-exact/full-board-draw.rcg', import.meta.url))]);
+  await wait('[...document.querySelectorAll(".active-turn .move-list li")].length === 7 && [...document.querySelectorAll(".active-turn .move-list li")].every(e => !/Unknown|Calculating|Queued/.test(e.textContent))', 'full-board four-each exact graph');
+  assert((await rows()).some(r => r.endsWith('Draw')));
+  await importPosition([...await readFile(new URL('../tests/fixtures/multicolor-exact/full-board-loss-in-6.rcg', import.meta.url))]);
+  await wait('[...document.querySelectorAll(".active-turn .move-list li")].length === 6 && [...document.querySelectorAll(".active-turn .move-list li")].every(e => /Loss in/.test(e.textContent))', 'full-board forced loss');
+  assert((await rows()).some(r => r.endsWith('Loss in 6')));
+
   // Switch from active classic search to multi-color play, then back to the table.
   await preset('single'); await clickButton('Start new game'); await delay(60);
   await chooseGame(6, 5);
@@ -346,7 +358,7 @@ try {
   assert.equal(workers.size, 1, 'multi-color play does not spawn another worker');
 
   assert.deepEqual(exceptions, [], 'browser runtime exceptions');
-  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw, custom settings, complete 3,3 opening, player-swap reuse, automatic and explicit continuation, inventory switching, multi-color selection/stocks/keyboard/previews/export/import/wins/general-search/material-draw/pause/resume/Unknown/switching');
+  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw, custom settings, complete 3,3 opening, player-swap reuse, automatic and explicit continuation, inventory switching, multi-color selection/stocks/keyboard/previews/export/import/wins/general-search/material-draw/pause/resume/Unknown/switching/full-board-four-each');
 } finally {
   ws?.close();
   const exited = chrome.exitCode !== null ? Promise.resolve() : new Promise(resolve => chrome.once('exit', resolve));

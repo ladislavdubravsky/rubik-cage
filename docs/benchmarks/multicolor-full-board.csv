@@ -1,0 +1,7 @@
+fixture,states,edges,solve_ms,verify_ms,root,rules
+full-444-0,393,2119,43.709,18.546,Draw,simulator-continue-after-last-drop
+full-444-1,393,2071,25.971,16.421,"Win { winner: 0, plies: 1 }",simulator-continue-after-last-drop
+full-444-2,365,1855,8.754,10.358,"Win { winner: 0, plies: 1 }",simulator-continue-after-last-drop
+full-444-3,449,2695,13.852,10.026,Draw,simulator-continue-after-last-drop
+full-444-4,393,2071,11.564,9.821,"Win { winner: 0, plies: 1 }",simulator-continue-after-last-drop
+full-board-loss-in-6,392,2064,43.111,51.377,"Win { winner: 0, plies: 6 }",simulator-continue-after-last-drop

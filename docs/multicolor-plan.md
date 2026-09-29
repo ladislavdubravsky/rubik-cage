@@ -1,6 +1,6 @@
 # Multi-color games: feasibility and implementation plan
 
-Status: steps 1–4 implemented. Multi-color games support play, per-color settings and persistence, plus resumable exact evaluation with core verification, incremental tiny graph solves, proof verification and pause/resume. Difficult evaluations remain Unknown. The specialized two-color solver and legacy artifacts are preserved. See [compatibility regression gates](single-color-compatibility.md) and [general search behavior and limits](general-search.md). Compact color-aware search, safe color relabeling and threat ordering are measured on native and WASM; see [step-4 results](search-performance.md). Larger offline studies remain optional step 5.
+Status: steps 1–4 implemented. Multi-color games support play, per-color settings and persistence, plus resumable exact evaluation with core verification, incremental tiny graph solves, proof verification and pause/resume. Difficult evaluations remain Unknown. The specialized two-color solver and legacy artifacts are preserved. See [compatibility regression gates](single-color-compatibility.md) and [general search behavior and limits](general-search.md). Compact color-aware search, safe color relabeling and threat ordering are measured on native and WASM; see [step-4 results](search-performance.md). Initial four-per-color experiments and full-board exact evaluation are now available; see [results and AI research](multicolor-ai-research.md). Broader offline studies and an approximate AI remain follow-up work.
 
 ## Scope and recommendation
 
