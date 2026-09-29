@@ -1,0 +1,77 @@
+.player-panel {
+    width: 290px;
+    padding: 20px 18px;
+    background: linear-gradient(135deg, #272822 0%, #49483e 100%);
+    border-radius: 14px;
+    box-shadow: 0 6px 24px rgba(39, 40, 34, 0.18);
+    font-family: 'Fira Mono', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'monospace';
+    color: #f8f8f2;
+    font-weight: 500;
+}
+
+.active-turn {
+    border: 2px solid #a6e22e;
+    background: #49483e;
+}
+
+.cubies-remaining {
+    display: grid;
+    grid-template-columns: repeat(6, 20px);
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.cubie-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(80, 80, 120, 0.10);
+    border: 2px solid #a6e22e;
+}
+
+.cubie-icon.Blue {
+    background-color: var(--cubie-blue);
+    border-color: var(--cubie-blue);
+}
+
+.cubie-icon.Red {
+    background-color: var(--cubie-red);
+    border-color: var(--cubie-red);
+}
+
+.move-list {
+    margin-top: 14px;
+    list-style-type: none;
+    padding-left: 0;
+}
+
+.move-list li {
+    margin-bottom: 6px;
+    cursor: pointer;
+    background: #49483e;
+    color: #a6e22e;
+    font-weight: 500;
+    transition: border-color 0.2s;
+    border: 1.5px solid transparent;
+}
+
+.move-highlighted {
+    box-shadow: 0 0 0 4px var(--highlight-color);
+}
+
+.color-reserves { display: flex; flex-direction: column; gap: 0.5em; }
+.color-selector { display: flex; align-items: center; gap: 0.5em; width: 100%; padding: 0.5em; background: #303126; color: #f8f8f2; font: inherit; border: 2px solid #75715e; border-radius: 5px; cursor: pointer; }
+.color-selector[aria-pressed="true"] { border-color: #a6e22e; box-shadow: inset 0 0 0 1px #a6e22e; }
+.color-selector:disabled { cursor: default; opacity: 0.6; }
+.color-selector:focus-visible, .slot:focus-visible { outline: 3px solid #66d9ef; outline-offset: 3px; }
+.selection-status { font-size: 0.9em; margin-bottom: 1em; }
+.cubie-icon.White { background-color: var(--cubie-white); border-color: var(--cubie-white); }
+.cubie-icon.Yellow { background-color: var(--cubie-yellow); border-color: var(--cubie-yellow); }
+.cubie-icon.Orange { background-color: var(--cubie-orange); border-color: var(--cubie-orange); }
+.cubie-icon.Green { background-color: var(--cubie-green); border-color: var(--cubie-green); }
+.move-list { max-height: 28rem; overflow-y: auto; padding: 4px; }
+
+.player-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+.player-ai-status { color: #66d9ef; font-weight: 700; margin: 0 0 1em; }
+.ai-controlled .player-controls { opacity: 0.55; }
+.ai-controlled .move-list li { cursor: not-allowed; pointer-events: none; }

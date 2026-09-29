@@ -1,6 +1,10 @@
 :root {
     --cubie-blue: #66d9ef;
     --cubie-red: #f92672;
+    --cubie-white: #f5f5f0;
+    --cubie-yellow: #f8d642;
+    --cubie-orange: #ff962e;
+    --cubie-green: #55b96b;
     --slot-empty: #49483e;
 }
 
@@ -84,3 +88,18 @@ a {
     background: #fd971f;
     box-shadow: 0 8px 24px rgba(39, 40, 34, 0.22);
 }
+
+.settings-panel select { max-width: 100%; padding: 0.4em; margin: 0.4em; font: inherit; color: #f8f8f2; background: #272822; }
+.settings-fields fieldset { border: 1px solid #75715e; border-radius: 5px; display: flex; flex-wrap: wrap; gap: 0.5em; justify-content: center; }
+.settings-fields legend { padding: 0 0.4em; }
+@media (max-width: 1050px) { .game-area { flex-wrap: wrap; padding: 16px 8px; gap: 16px; } .settings-fields { flex-wrap: wrap; } }
+@media (max-width: 1050px) { .game-area > .cage { order: -1; } }
+
+.ai-controls { width: min(960px, calc(100% - 24px)); box-sizing: border-box; margin: 8px 0 24px; padding: 16px; border: 1px solid #75715e; border-radius: 12px; background: #20211d; }
+.ai-controls h2 { margin: 0 0 12px; font-size: 1.15em; }
+.ai-options, .ai-actions { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 12px; }
+.ai-options label { display: flex; align-items: center; gap: 8px; }
+.ai-options select { padding: 0.4em; font: inherit; color: #f8f8f2; background: #272822; max-width: 100%; border: 1px solid #75715e; border-radius: 4px; }
+.ai-actions .control-button { font-size: 0.95em; }
+.ai-controls p { line-height: 1.5; margin-top: 8px; overflow-wrap: anywhere; }
+#ai-details, #ai-line { color: #c7c6b8; font-size: 0.9em; }
