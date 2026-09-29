@@ -2,7 +2,7 @@ use crate::{
     app::{
         game_control::GameControl,
         hovered_move::use_hovered_move,
-        utils::{apply_move_callback, slot_to_css},
+        utils::{slot_to_css, use_apply_move_callback},
     },
     core::{
         cubie::Cubie,
@@ -37,7 +37,7 @@ pub fn cage(props: &CageProps) -> Html {
 
     let won = props.game_state.won();
     let game_frozen = props.game_state.outcome().is_some();
-    let apply_move = apply_move_callback(
+    let apply_move = use_apply_move_callback(
         game_state_handle.clone(),
         history_handle.clone(),
         game_frozen,

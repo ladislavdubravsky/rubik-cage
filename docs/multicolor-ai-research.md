@@ -4,6 +4,8 @@ Research and experiments: 2026-09-29. The target is `((4,4,4),(4,4,4))`: two pla
 
 Useful exact evaluation is already possible in this game, including nontrivial reachable tactics. The empty opening is still unresolved in the bounded tests below. A practical AI need not wait for an opening solution: the recommended next implementation is iterative-deepening alpha-beta with tactical checks, a color-aware heuristic, and exact endgame analysis where available. This recommendation is an inference from the local experiments and research in related games, not a measured playing-strength claim.
 
+The first alpha-beta player is now implemented with optional computer turns and separate move suggestions; see [controls, implementation and limits](ai-player.md). The research measurements below describe the preceding exact-search experiments.
+
 ## Rule boundary discovered during research
 
 The licensed 2019 John Adams/Rubik’s leaflet specifies 24 cubies, three colors per player, and a draw when the final cubie is placed without a winner. A player who individually runs out of cubies can still rotate or flip while the game continues. See [the manufacturer-authored leaflet, mirrored PDF, page 2](https://manuals.plus/m/81e7c0f96397fd6c820c056184c86d23c06689b16e3b5a84ede25810cfb59942.pdf).
@@ -126,4 +128,4 @@ Before offering an AI player:
 
 Validation for this change: all 75 native release tests passed, including independent proof checks and a full-board solve with zero finite-horizon proof-record allowance. The release WASM build and browser smoke suite passed, covering the five-ply tactic, full-board draw/loss and existing two-color workflows. The single-color audit retained the exact `(12,12)` result and its 21,072 calls / 4,874 bound records.
 
-The immediate deliverables here are the exact-search improvement, reproducible proved fixtures and this researched AI plan. An autonomous approximate player has not been added to the UI.
+The initial research delivered the exact-search improvement, reproducible proved fixtures and this AI plan. The [first approximate player](ai-player.md) now implements the alpha-beta stage; tactical MCTS, learning and broader playing-strength comparisons remain follow-up work.

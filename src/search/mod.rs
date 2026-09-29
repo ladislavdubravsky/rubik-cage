@@ -1,4 +1,5 @@
-//! Exact graph minimax. The historical `naive.rs` is deliberately not compiled.
+//! Exact evaluation and separate approximate move search. Historical `naive.rs` is not compiled.
+pub mod ai;
 pub mod bounded;
 pub mod cache;
 pub mod general;

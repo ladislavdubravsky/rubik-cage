@@ -1,3 +1,4 @@
+use crate::app::ai::{AiContext, AiInteraction};
 use crate::core::{cubie::Cubie, game::GameState};
 use web_sys::{HtmlInputElement, HtmlSelectElement};
 use yew::prelude::*;
@@ -10,6 +11,7 @@ pub struct GameSettingsProps {
 
 #[function_component(GameSettings)]
 pub fn game_settings(props: &GameSettingsProps) -> Html {
+    let ai = use_context::<AiContext>();
     let open = use_state(|| false);
     let draft = use_state(|| GameState::new(12, 12));
     let stocks = use_state(|| {
@@ -18,12 +20,16 @@ pub fn game_settings(props: &GameSettingsProps) -> Html {
             .map(|n| n.to_string())
     });
     let toggle = {
+        let ai = ai.clone();
         let open = open.clone();
         let draft = draft.clone();
         let stocks = stocks.clone();
         let state = *props.game_state;
         Callback::from(move |_| {
             if !*open {
+                if let Some(ai) = &ai {
+                    ai.0.emit(AiInteraction::Reset);
+                }
                 let initial = state.restarted();
                 stocks.set(initial.remaining_cubies.map(|n| n.to_string()));
                 draft.set(initial);
@@ -32,9 +38,13 @@ pub fn game_settings(props: &GameSettingsProps) -> Html {
         })
     };
     let preset = {
+        let ai = ai.clone();
         let draft = draft.clone();
         let stocks = stocks.clone();
         Callback::from(move |event: Event| {
+            if let Some(ai) = &ai {
+                ai.0.emit(AiInteraction::Reset);
+            }
             let input: HtmlSelectElement = event.target_unchecked_into();
             let initial = if input.value() == "multi" {
                 GameState::multicolor()
@@ -60,12 +70,16 @@ pub fn game_settings(props: &GameSettingsProps) -> Html {
         GameState::with_colors(draft.color_owners, remaining).ok()
     })();
     let start = {
+        let ai = ai.clone();
         let open = open.clone();
         let game_state = props.game_state.clone();
         let history = props.history.clone();
         Callback::from(move |event: SubmitEvent| {
             event.prevent_default();
             if let Some(initial) = candidate {
+                if let Some(ai) = &ai {
+                    ai.0.emit(AiInteraction::Reset);
+                }
                 game_state.set(initial);
                 history.set(Vec::new());
                 open.set(false);
@@ -103,7 +117,8 @@ pub fn game_settings(props: &GameSettingsProps) -> Html {
                             <fieldset>
                                 <legend>{format!("Player {}", id + 1)}</legend>
                                 {for draft.colors_for(id).map(|color| {
-                                    let oninput = { let stocks = stocks.clone(); Callback::from(move |event: InputEvent| {
+                                    let oninput = { let ai = ai.clone(); let stocks = stocks.clone(); Callback::from(move |event: InputEvent| {
+                                        if let Some(ai) = &ai { ai.0.emit(AiInteraction::Reset); }
                                         let input: HtmlInputElement = event.target_unchecked_into();
                                         let mut next = (*stocks).clone(); next[color as usize] = input.value(); stocks.set(next);
                                     }) };

@@ -1,5 +1,8 @@
 use crate::{
-    app::evaluation::EvaluationContext,
+    app::{
+        ai::{AiContext, AiInteraction},
+        evaluation::EvaluationContext,
+    },
     core::{cubie::Cubie, game::GameState, r#move::Move},
     search::Evaluation,
 };
@@ -8,11 +11,13 @@ use yew::prelude::*;
 pub const STORAGE_KEY: &str = "rubik_cage_position";
 pub const RELOAD_FLAG_KEY: &str = "load_position_on_next_reload";
 
-pub fn apply_move_callback(
+#[hook]
+pub fn use_apply_move_callback(
     game_state_handle: UseStateHandle<GameState>,
     history_handle: UseStateHandle<Vec<GameState>>,
     game_frozen: bool,
 ) -> Callback<Move> {
+    let ai = use_context::<AiContext>();
     let game_state_handle = game_state_handle.clone();
     let history_handle = history_handle.clone();
     Callback::from(move |m: Move| {
@@ -21,6 +26,12 @@ pub fn apply_move_callback(
             if new_state.apply_move(m).is_ok() {
                 let mut new_history = (*history_handle).clone();
                 new_history.push((*game_state_handle).clone());
+                if let Some(ai) = &ai {
+                    ai.0.emit(AiInteraction::Move {
+                        state: new_state,
+                        history: new_history.clone(),
+                    });
+                }
                 history_handle.set(new_history);
                 game_state_handle.set(new_state);
             }

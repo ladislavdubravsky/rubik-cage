@@ -357,8 +357,84 @@ try {
   assert.deepEqual(await rows(), opening, 'classic table survives multi-color play and pending requests');
   assert.equal(workers.size, 1, 'multi-color play does not spawn another worker');
 
+  // AI advice is opt-in, uses the same worker, and preserves exact labels.
+  assert(await js('[...document.querySelectorAll("#ai-controls select[name^=ai-player]")].every(e => e.value === "human")'));
+  const aiSelect = async (name, value) => {
+    await js(`(() => { const e = document.querySelector('[name="${name}"]'); e.value = ${JSON.stringify(value)}; e.dispatchEvent(new Event('change', {bubbles:true})); })()`);
+    await delay(40);
+  };
+  await aiSelect('ai-time', '100');
+  await js('document.querySelector("#ai-suggest").click()');
+  await wait('document.querySelector("#ai-play") && !document.querySelector("#ai-play").disabled', 'classic AI suggestion');
+  assert.deepEqual(await rows(), opening, 'requesting advice never plays or changes exact move values');
+  await js('document.querySelector("#ai-play").click()');
+  await wait('document.querySelector(".active-turn h2")?.textContent === "Player 2"', 'play AI suggestion');
+  assert((await rows()).every(r => /Loss in/.test(r)), 'AI chooses a proved winning classic move');
+  await clickButton('Undo last move'); await delay(100);
+  assert.deepEqual(await rows(), opening);
+  assert(await js('!document.querySelector("#ai-play") || document.querySelector("#ai-play").disabled'), 'undo clears stale advice');
+
+  // A Human-v-Computer game responds to a human move, but undo suspends autoplay.
+  await aiSelect('ai-player-2', 'computer');
+  await js('document.querySelector("#ai-start").click()');
+  await clickMove('Drop at 0,0:');
+  await wait('document.querySelector(".active-turn h2")?.textContent === "Player 1"', 'computer responds to the human turn');
+  await clickButton('Undo last move'); await delay(500);
+  assert.equal(await js('document.querySelector(".active-turn h2")?.textContent'), 'Player 2', 'undo does not immediately replay the computer move');
+  await aiSelect('ai-player-2', 'human');
+  await clickButton('Restart the game'); await delay(100);
+
+  // Both computer players can complete the certified classic game automatically.
+  await aiSelect('ai-player-1', 'computer');
+  await aiSelect('ai-player-2', 'computer');
+  await js('document.querySelector("#ai-start").click()');
+  await wait('document.body.innerText.includes("Blue won!")', 'computer self-play completes a classic game');
+  assert.equal((await rows()).length, 0);
+  await aiSelect('ai-player-1', 'human');
+  await aiSelect('ai-player-2', 'human');
+
+  await importPosition(multiPosition('.........', [4,4,4,4,4,4]));
+  await js('document.querySelector("#ai-suggest").click()');
+  await wait('document.querySelector("#ai-play") && !document.querySelector("#ai-play").disabled', 'four-each opening gets bounded heuristic advice');
+  assert((await rows()).some(r => /Unknown|Calculating|Queued/.test(r)), 'heuristic advice does not become an exact evaluation');
+  assert(await js('!!document.querySelector("#ai-details")?.textContent'));
+  const unknownOpeningRows = await rows();
+  await delay(150);
+  assert.equal((await rows()).length, unknownOpeningRows.length, 'advice does not automatically play');
+  if (process.env.AI_SCREENSHOT) {
+    await call('Emulation.setDeviceMetricsOverride', {width:1280, height:1000, deviceScaleFactor:1, mobile:false});
+    await writeFile(process.env.AI_SCREENSHOT, Buffer.from((await call('Page.captureScreenshot', {captureBeyondViewport:true})).data, 'base64'));
+    await call('Emulation.setDeviceMetricsOverride', {width:420, height:900, deviceScaleFactor:1, mobile:true});
+    await writeFile(process.env.AI_SCREENSHOT.replace(/\.png$/, '.mobile.png'), Buffer.from((await call('Page.captureScreenshot', {captureBeyondViewport:true})).data, 'base64'));
+    await call('Emulation.clearDeviceMetricsOverride');
+  }
+
+  // Cancel a long analysis by importing another game; no late result may play.
+  await aiSelect('ai-time', '10000');
+  await js('document.querySelector("#ai-suggest").click()');
+  await delay(80);
+  await js('document.querySelector("#ai-pause").click()');
+  await delay(150);
+  assert(await js('document.querySelector("#ai-status").textContent === "AI paused."'));
+  assert(await js('document.querySelector("#ai-play").disabled'), 'pausing discards pending advice');
+  await js('document.querySelector("#ai-suggest").click()');
+  await delay(80);
+  await importPosition(legacy(12, 12));
+  await delay(500);
+  assert.deepEqual(await rows(), opening, 'import cancels pending AI work');
+  assert(await js('!document.querySelector("#ai-play") || document.querySelector("#ai-play").disabled'));
+  // Explicit cancellation also works when restarting an identical opening.
+  await importPosition(multiPosition('.........', [4,4,4,4,4,4]));
+  await js('document.querySelector("#ai-suggest").click()');
+  await delay(80);
+  await clickButton('Restart the game'); await delay(300);
+  assert(await js('!document.querySelector("#ai-play") || document.querySelector("#ai-play").disabled'));
+  await importPosition(multiPosition('WWW...RRR', [0,3,0,3,3,3]));
+  assert(await js('document.querySelector("#ai-suggest").disabled'), 'terminal positions cannot request an AI move');
+  assert.equal(workers.size, 1, 'AI and exact evaluation share one reusable worker');
+
   assert.deepEqual(exceptions, [], 'browser runtime exceptions');
-  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw, custom settings, complete 3,3 opening, player-swap reuse, automatic and explicit continuation, inventory switching, multi-color selection/stocks/keyboard/previews/export/import/wins/general-search/material-draw/pause/resume/Unknown/switching/full-board-four-each');
+  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw, custom settings, complete 3,3 opening, player-swap reuse, automatic and explicit continuation, inventory switching, multi-color selection/stocks/keyboard/previews/export/import/wins/general-search/material-draw/pause/resume/Unknown/switching/full-board-four-each/AI-advice/AI-turns/AI-self-play/AI-pause/AI-cancellation');
 } finally {
   ws?.close();
   const exited = chrome.exitCode !== null ? Promise.resolve() : new Promise(resolve => chrome.once('exit', resolve));

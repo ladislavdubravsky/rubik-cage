@@ -8,7 +8,7 @@ use crate::{
     core::{game::GameState, snapshot},
 };
 use app::{
-    agent::EvaluationTask, cage::Cage, evaluation::EvaluationProvider,
+    agent::EvaluationTask, ai::AiControls, cage::Cage, evaluation::EvaluationProvider,
     hovered_move::HoveredMoveProvider, player::PlayerPanel,
 };
 use web_sys::window;
@@ -62,6 +62,7 @@ pub fn app() -> Html {
             </p>
             <OneshotProvider<EvaluationTask> path="/rubik-cage/worker.js">
                 <EvaluationProvider state={game_state.clone()}>
+                <AiControls game_state={game_state.clone()} history={history.clone()}>
                 <HoveredMoveProvider state={*game_state}>
                     <div class="game-area">
                         <PlayerPanel
@@ -79,6 +80,7 @@ pub fn app() -> Html {
                         />
                     </div>
                 </HoveredMoveProvider>
+                </AiControls>
                 </EvaluationProvider>
             </OneshotProvider<EvaluationTask>>
         </div>

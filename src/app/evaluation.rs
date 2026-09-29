@@ -96,6 +96,7 @@ pub fn evaluation_provider(props: &EvaluationProviderProps) -> Html {
                             state,
                             request_id,
                             batch,
+                            ai: None,
                         })
                         .await;
                     if response.request_id != *serial.borrow() {

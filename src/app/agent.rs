@@ -15,6 +15,25 @@ pub struct EvaluationTaskSpec {
     pub state: GameState,
     pub request_id: u64,
     pub batch: u8,
+    pub ai: Option<AiTaskSpec>,
+}
+
+/// Approximate advice shares the exact worker, but never its result map.
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct AiTaskSpec {
+    pub session_id: u64,
+    pub max_millis: u32,
+    /// Only already-proved root/child values; never an approximate score.
+    pub known: EvaluationMap,
+}
+
+struct AiSession {
+    id: u64,
+    state: GameState,
+    known: EvaluationMap,
+    requested: Vec<GameState>,
+    oracle: Option<search::general::Search>,
+    search: Option<search::ai::Search>,
 }
 
 pub const AUTOMATIC_BATCHES: u8 = 8;
@@ -42,11 +61,13 @@ pub struct EvaluationTaskResult {
     /// Every entry is exact, even when other moves remain unknown.
     pub values: EvaluationMap,
     pub status: TaskStatus,
+    pub ai: Option<search::ai::Analysis>,
 }
 
-// A single worker owns both caches; packed bounds never cross inventory/color spaces.
+// One worker owns exact and approximate caches; their values and namespaces stay separate.
 thread_local! {
     static KNOWN: RefCell<EvaluationMap> = RefCell::new(super::evaluation::precomputed());
+    static AI: RefCell<Option<AiSession>> = const { RefCell::new(None) };
     static GENERAL: RefCell<Option<search::general::Search>> = const { RefCell::new(None) };
     static SEARCH: RefCell<Option<Search>> = const { RefCell::new(None) };
 }
@@ -238,8 +259,139 @@ fn evaluate_general(
     Ok((result.values, status))
 }
 
+fn evaluate_ai(
+    state: &GameState,
+    spec: AiTaskSpec,
+    retained: &mut Option<AiSession>,
+) -> Result<Option<search::ai::Analysis>, String> {
+    state.validate().map_err(str::to_owned)?;
+    if retained
+        .as_ref()
+        .is_none_or(|s| s.id != spec.session_id || s.state != *state)
+    {
+        // Limit imported oracle values to this request. The UI sends at most one
+        // root and its legal children; ownership/inventory remain in each key.
+        let mut requested = vec![*state];
+        for m in state.legal_moves() {
+            let mut child = *state;
+            child.apply_move(m).map_err(str::to_owned)?;
+            requested.push(child);
+        }
+        let mut known = EvaluationMap::new();
+        for child in &requested {
+            if let Some(value) = search::lookup_exact(&spec.known, child) {
+                known.insert(child.position_key(), value);
+            }
+        }
+        if state.single_colors().is_some() {
+            KNOWN.with(|cached| {
+                for child in &requested {
+                    if let Some(value) = search::lookup_exact(&cached.borrow(), child) {
+                        known.insert(child.position_key(), value);
+                    }
+                }
+            });
+        }
+        let full = state
+            .cage
+            .grid
+            .iter()
+            .flatten()
+            .flatten()
+            .filter(|c| c.is_some())
+            .count()
+            == 24;
+        let missing = requested
+            .iter()
+            .any(|s| search::lookup_exact(&known, s).is_none());
+        let oracle = if full && missing && state.outcome().is_none() {
+            Some(search::general::Search::new(state)?)
+        } else {
+            None
+        };
+        *retained = Some(AiSession {
+            id: spec.session_id,
+            state: *state,
+            known,
+            requested,
+            oracle,
+            search: None,
+        });
+    }
+    let session = retained.as_mut().unwrap();
+    let mut incoming = EvaluationMap::new();
+    for child in &session.requested {
+        if let Some(value) = search::lookup_exact(&spec.known, child) {
+            incoming.insert(child.position_key(), value);
+        }
+    }
+    let changed = incoming
+        .iter()
+        .any(|(key, value)| session.known.get(key) != Some(value));
+    search::merge_exact(&mut session.known, incoming)?;
+    if changed {
+        // A concurrently completed proof outranks older approximate work.
+        session.search = None;
+    }
+    if let Some(oracle) = session.oracle.as_mut() {
+        // The complete full-board graph is small and independent of heuristic
+        // search. It yields between batches just like ordinary exact evaluation.
+        let result = oracle.run(
+            state,
+            search::general::Budget {
+                max_steps: 4000,
+                max_records: 0,
+                max_bytes: 16 * 1024 * 1024,
+                max_horizon: 0,
+            },
+        )?;
+        search::merge_exact(&mut session.known, result.values)?;
+        if !result.complete && !result.at_capacity && !result.exhausted {
+            return Ok(None);
+        }
+        session.oracle = None;
+    }
+    if session.search.is_none() {
+        session.search = Some(search::ai::Search::new(
+            state,
+            &session.known,
+            search::ai::Limits::default(),
+        )?);
+    }
+    Ok(Some(session.search.as_mut().unwrap().run(
+        search::ai::Budget {
+            max_nodes: 4000,
+            max_millis: spec.max_millis.clamp(1, 40),
+        },
+    )))
+}
+
 #[oneshot]
 pub async fn EvaluationTask(spec: EvaluationTaskSpec) -> EvaluationTaskResult {
+    if let Some(ai_spec) = spec.ai {
+        let result =
+            AI.with(|retained| evaluate_ai(&spec.state, ai_spec, &mut retained.borrow_mut()));
+        let (ai, status) = match result {
+            Ok(analysis) => {
+                let status = if analysis.as_ref().is_some_and(|a| a.finished) {
+                    TaskStatus::Complete
+                } else {
+                    TaskStatus::Continuing
+                };
+                (analysis, status)
+            }
+            Err(error) => (
+                None,
+                TaskStatus::Failed(format!("AI analysis could not be completed: {error}")),
+            ),
+        };
+        return EvaluationTaskResult {
+            request_id: spec.request_id,
+            values: EvaluationMap::new(),
+            status,
+            ai,
+        };
+    }
     if spec.state.single_colors().is_none() {
         let result = GENERAL
             .with(|retained| evaluate_general(&spec.state, &mut retained.borrow_mut(), spec.batch));
@@ -248,11 +400,13 @@ pub async fn EvaluationTask(spec: EvaluationTaskSpec) -> EvaluationTaskResult {
                 request_id: spec.request_id,
                 values,
                 status,
+                ai: None,
             },
             Err(error) => EvaluationTaskResult {
                 request_id: spec.request_id,
                 values: EvaluationMap::new(),
                 status: TaskStatus::Failed(error),
+                ai: None,
             },
         };
     }
@@ -284,12 +438,170 @@ pub async fn EvaluationTask(spec: EvaluationTaskSpec) -> EvaluationTaskResult {
         request_id: spec.request_id,
         values,
         status,
+        ai: None,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ai_worker_uses_complete_endgame_oracle_and_replaces_stale_sessions() {
+        let state = crate::core::snapshot::decode(include_bytes!(
+            "../../tests/fixtures/multicolor-exact/full-board-loss-in-6.rcg"
+        ))
+        .unwrap();
+        let mut retained = None;
+        let mut answer = None;
+        for _ in 0..32 {
+            if let Some(analysis) = evaluate_ai(
+                &state,
+                AiTaskSpec {
+                    session_id: 1,
+                    max_millis: 40,
+                    known: EvaluationMap::new(),
+                },
+                &mut retained,
+            )
+            .unwrap()
+            {
+                if analysis.tactical_complete && analysis.best_move.is_some() {
+                    answer = Some(analysis);
+                    break;
+                }
+            }
+        }
+        let answer =
+            answer.expect("Full-board oracle and AI must finish within normal worker batches");
+        assert_eq!(
+            answer.exact,
+            Some(Evaluation::Win {
+                winner: 0,
+                plies: 6
+            })
+        );
+        let mut child = state;
+        child.apply_move(answer.best_move.unwrap()).unwrap();
+        let reference =
+            retrograde::solve(&state, &EvaluationMap::new(), Limits::default()).unwrap();
+        assert_eq!(
+            reference.values[&child.position_key()],
+            Evaluation::Win {
+                winner: 0,
+                plies: 5
+            }
+        );
+        let other = GameState::multicolor();
+        evaluate_ai(
+            &other,
+            AiTaskSpec {
+                session_id: 2,
+                max_millis: 1,
+                known: EvaluationMap::new(),
+            },
+            &mut retained,
+        )
+        .unwrap();
+        assert_eq!(retained.as_ref().unwrap().id, 2);
+        assert_eq!(retained.as_ref().unwrap().state, other);
+        assert!(retained.as_ref().unwrap().oracle.is_none());
+    }
+
+    #[test]
+    fn ai_worker_refreshes_advice_when_an_exact_proof_arrives() {
+        let state = crate::core::snapshot::decode(include_bytes!(
+            "../../tests/fixtures/multicolor-exact/tactic-win-in-3.rcg"
+        ))
+        .unwrap();
+        let mut retained = None;
+        let initial = evaluate_ai(
+            &state,
+            AiTaskSpec {
+                session_id: 7,
+                max_millis: 1,
+                known: EvaluationMap::new(),
+            },
+            &mut retained,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(initial.exact, None);
+        let mut proof_search = search::general::Search::new(&state).unwrap();
+        let mut proved = EvaluationMap::new();
+        for _ in 0..32 {
+            let result = proof_search
+                .run(
+                    &state,
+                    search::general::Budget {
+                        max_steps: 20_000,
+                        max_records: 100_000,
+                        max_bytes: 32 * 1024 * 1024,
+                        max_horizon: 5,
+                    },
+                )
+                .unwrap();
+            proved.extend(result.values);
+            if proved.contains_key(&state.position_key()) {
+                break;
+            }
+        }
+        proof_search.proof.verify().unwrap();
+        let expected = Some(Evaluation::Win {
+            winner: 0,
+            plies: 3,
+        });
+        assert_eq!(proved.get(&state.position_key()).copied(), expected);
+        let refreshed = evaluate_ai(
+            &state,
+            AiTaskSpec {
+                session_id: 7,
+                max_millis: 1,
+                known: proved,
+            },
+            &mut retained,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(refreshed.exact, expected);
+    }
+
+    #[test]
+    fn ai_worker_uses_legacy_exact_values_without_changing_them() {
+        let state = GameState::new(12, 12);
+        let before = KNOWN.with(|known| known.borrow().clone());
+        let mut retained = None;
+        let mut answer = None;
+        for _ in 0..32 {
+            if let Some(analysis) = evaluate_ai(
+                &state,
+                AiTaskSpec {
+                    session_id: 1,
+                    max_millis: 40,
+                    known: EvaluationMap::new(),
+                },
+                &mut retained,
+            )
+            .unwrap()
+            {
+                if analysis.tactical_complete {
+                    answer = Some(analysis);
+                    break;
+                }
+            }
+        }
+        let answer = answer.unwrap();
+        let mut child = state;
+        child.apply_move(answer.best_move.unwrap()).unwrap();
+        assert_eq!(
+            search::lookup_exact(&before, &child),
+            Some(Evaluation::Win {
+                winner: 0,
+                plies: 10
+            })
+        );
+        KNOWN.with(|known| assert_eq!(*known.borrow(), before));
+    }
     #[test]
     fn general_worker_returns_material_draws_tactics_and_matching_namespaces() {
         let mut state = GameState::multicolor();

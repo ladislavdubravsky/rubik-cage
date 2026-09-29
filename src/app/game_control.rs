@@ -1,5 +1,9 @@
 use crate::{
-    app::{game_settings::GameSettings, utils::RELOAD_FLAG_KEY},
+    app::{
+        ai::{AiContext, AiInteraction},
+        game_settings::GameSettings,
+        utils::RELOAD_FLAG_KEY,
+    },
     core::{game::GameState, snapshot},
 };
 use web_sys::{
@@ -16,9 +20,14 @@ pub struct GameControlProps {
 
 #[function_component(GameControl)]
 pub fn game_control(props: &GameControlProps) -> Html {
+    let ai = use_context::<AiContext>();
     let game_state_handle = props.game_state.clone();
     let history_handle = props.history.clone();
+    let undo_ai = ai.clone();
     let undo = Callback::from(move |_| {
+        if let Some(ai) = &undo_ai {
+            ai.0.emit(AiInteraction::Reset);
+        }
         let mut new_history = (*history_handle).clone();
         if let Some(prev_state) = new_history.pop() {
             game_state_handle.set(prev_state);
@@ -28,7 +37,11 @@ pub fn game_control(props: &GameControlProps) -> Html {
 
     let game_state_handle = props.game_state.clone();
     let history_handle = props.history.clone();
+    let restart_ai = ai.clone();
     let restart = Callback::from(move |_| {
+        if let Some(ai) = &restart_ai {
+            ai.0.emit(AiInteraction::Reset);
+        }
         let initial = game_state_handle.restarted();
         game_state_handle.set(initial);
         history_handle.set(Vec::new());
@@ -53,7 +66,12 @@ pub fn game_control(props: &GameControlProps) -> Html {
 
     let game_state_handle = props.game_state.clone();
     let history_handle = props.history.clone();
+    let import_ai = ai.clone();
     let import = Callback::from(move |_| {
+        if let Some(ai) = &import_ai {
+            ai.0.emit(AiInteraction::Reset);
+        }
+        let import_ai = import_ai.clone();
         let window = web_sys::window().unwrap();
         let document = window.document().unwrap();
         let input = document.create_element("input").unwrap();
@@ -73,12 +91,16 @@ pub fn game_control(props: &GameControlProps) -> Html {
                     let game_state_handle = game_state_handle.clone();
                     let history_handle = history_handle.clone();
                     let window = window.clone();
+                    let import_ai = import_ai.clone();
                     let onload = Closure::wrap(Box::new(move |_e: web_sys::Event| {
                         let result = fr_clone.result().unwrap();
                         let array = js_sys::Uint8Array::new(&result);
                         let mut vec = vec![0u8; array.length() as usize];
                         array.copy_to(&mut vec[..]);
                         if let Ok(state) = snapshot::decode(&vec) {
+                            if let Some(ai) = &import_ai {
+                                ai.0.emit(AiInteraction::Reset);
+                            }
                             game_state_handle.set(state);
                             history_handle.set(Vec::new());
                         } else {

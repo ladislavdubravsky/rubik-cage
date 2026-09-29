@@ -281,6 +281,53 @@ impl Space {
         }
         score
     }
+    /// Antisymmetric positional potential for the approximate player. This is
+    /// deliberately separate from the asymmetric proof-search move ordering.
+    pub(crate) fn heuristic(&self, pos: Position, player: u8) -> i32 {
+        let counts = self.counts(pos);
+        let mut score = 0;
+        for line in LINE_CELLS {
+            let cells = line.map(|i| pos.cell(i));
+            let color = cells.iter().copied().find(|&c| c != 0).unwrap_or(0);
+            if color == 0 || cells.iter().any(|&c| c != 0 && c != color) {
+                continue;
+            }
+            let c = color as usize - 1;
+            if self.totals[c] < 3 {
+                continue;
+            }
+            let count = cells.iter().filter(|&&c| c != 0).count();
+            let reserve = self.totals[c] - counts[c];
+            let support: usize = line
+                .iter()
+                .filter(|&&i| pos.cell(i) == 0)
+                .map(|&i| (0..i / 8).filter(|&z| pos.cell(z * 8 + i % 8) == 0).count())
+                .sum();
+            let value = match count {
+                2 if reserve > 0 && support == 0 => 1200,
+                2 => 300,
+                1 if reserve >= 2 => 100 / (1 + support as i32),
+                1 => 25 / (1 + support as i32),
+                _ => 0,
+            };
+            score += if self.owners[c] == Some(player) {
+                value
+            } else {
+                -value
+            };
+        }
+        score.clamp(-100_000, 100_000)
+    }
+    pub(crate) fn volatile(&self, pos: Position) -> bool {
+        LINE_CELLS.iter().any(|line| {
+            let cells = line.map(|i| pos.cell(i));
+            let color = cells.iter().copied().find(|&c| c != 0).unwrap_or(0);
+            color != 0
+                && self.totals[color as usize - 1] >= 3
+                && cells.iter().filter(|&&c| c == color).count() == 2
+                && cells.iter().all(|&c| c == 0 || c == color)
+        })
+    }
     pub fn children(&self, pos: Position) -> Vec<Position> {
         if self.terminal(pos).is_some() {
             return Vec::new();

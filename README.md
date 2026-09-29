@@ -53,6 +53,8 @@ Choose **Three colors each · three cubies per color** in Game settings for mult
 
 Multi-color games now evaluate in the background using a separate, color-aware exact solver. It can prove short wins and losses, per-color material draws, complete tiny games, and full-board endgames under the simulator’s continuation rules. Difficult positions—including the full three-colors-each opening—can remain **Unknown**. **Pause search** and **Continue search** control bounded background work; playing, undo, restart, export and import remain available. The existing two-color solver and bundled opening values are preserved. See [general search, proof rules and resource limits](docs/general-search.md) and [native/WASM optimization measurements](docs/search-performance.md).
 
+The AI controls offer **Suggest move** and **Play suggested move**, plus optional Computer players with explicit **Start automatic turns** and **Pause AI** controls. Both players remain Human by default. Choose a 100 ms, 1 s or 10 s allowance; approximate advice stays separate from exact move evaluations. See [AI controls, search behavior and limitations](docs/ai-player.md).
+
 Custom single-color sizes are evaluated on demand by the shared background worker, including checks for proved draws. Results are reused in memory under complete state keys, including safe player-swap equivalents; no additional precomputed files are needed. Search continues automatically in bounded batches. If it reaches a limit, the UI says it is paused and offers **Continue search** when more resources are available. Larger positions can still remain Unknown at the final cap. The standard `(12,12)` opening keeps its bundled exact evaluations.
 
 ### Precomputing evaluations

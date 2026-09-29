@@ -94,3 +94,12 @@ a {
 .settings-fields legend { padding: 0 0.4em; }
 @media (max-width: 1050px) { .game-area { flex-wrap: wrap; padding: 16px 8px; gap: 16px; } .settings-fields { flex-wrap: wrap; } }
 @media (max-width: 1050px) { .game-area > .cage { order: -1; } }
+
+.ai-controls { width: min(960px, calc(100% - 24px)); box-sizing: border-box; margin: 8px 0 24px; padding: 16px; border: 1px solid #75715e; border-radius: 12px; background: #20211d; }
+.ai-controls h2 { margin: 0 0 12px; font-size: 1.15em; }
+.ai-options, .ai-actions { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 12px; }
+.ai-options label { display: flex; align-items: center; gap: 8px; }
+.ai-options select { padding: 0.4em; font: inherit; color: #f8f8f2; background: #272822; max-width: 100%; border: 1px solid #75715e; border-radius: 4px; }
+.ai-actions .control-button { font-size: 0.95em; }
+.ai-controls p { line-height: 1.5; margin-top: 8px; overflow-wrap: anywhere; }
+#ai-details, #ai-line { color: #c7c6b8; font-size: 0.9em; }

@@ -2,7 +2,7 @@ use crate::{
     app::{
         evaluation::EvaluationContext,
         hovered_move::use_hovered_move,
-        utils::{self, apply_move_callback},
+        utils::{self, use_apply_move_callback},
     },
     core::{
         cubie::Cubie,
@@ -51,7 +51,8 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
     let eval = use_context::<EvaluationContext>().expect("EvaluationProvider");
 
     let is_won = props.game_state.outcome().is_some();
-    let apply_move = apply_move_callback(props.game_state.clone(), props.history.clone(), is_won);
+    let apply_move =
+        use_apply_move_callback(props.game_state.clone(), props.history.clone(), is_won);
 
     let selected = utils::selected_color(
         &props.game_state,
