@@ -6,7 +6,7 @@ Status: steps 1–4 implemented. Multi-color games support play, per-color setti
 
 Feasible. Keep two alternating players, allow each to own several distinct colors, and require three cubies of one exact color for a winning line. Mixed-color lines do not win, even if every cubie belongs to the same player.
 
-The initial presets should be the existing one-color-per-player game, including its current 0–12 inventory controls, and the requested three-colors-per-player game with three cubies of each color (18 total). Advanced configuration can assign the six existing colors to either player and specify stocks per color. Ownership must be exclusive and fixed during a game. This proposal does not add more players or change gravity, legal rotations, flipping, immediate-undo restrictions, or the convention that lines for both players produce a draw. Two winning colors belonging to one player still produce that player's win.
+The initial presets should be the existing one-color-per-player game, including its current 0–12 inventory controls, and the requested three-colors-per-player game with four cubies of each color (24 total). Advanced configuration can assign the six existing colors to either player and specify stocks per color. Ownership must be exclusive and fixed during a game. This proposal does not add more players or change gravity, legal rotations, flipping, immediate-undo restrictions, or the convention that lines for both players produce a draw. Two winning colors belonging to one player still produce that player's win.
 
 Ship playable games independently of deep evaluation. Preserve the specialized two-color search backend, add a correct general path, then optimize multi-color evaluation based on measurements. Full solution of the requested opening is an investigation, not a release prerequisite or promised result.
 
@@ -60,7 +60,7 @@ The game remains deterministic, perfect-information and two-player. Existing min
 
 ### Retrograde
 
-The current retrograde solver delegates transitions to core and uses full position keys. After those are generalized, it is the natural correctness reference for tiny multi-color games. Its complete-graph requirement makes it unsuitable as the default exhaustive strategy for the 18-piece preset. An interrupted expansion must still publish no speculative draws. The existing worker discards failed graph expansions; avoid repeatedly rebuilding the same oversized graph, or retain a budgeted frontier in a later improvement.
+The current retrograde solver delegates transitions to core and uses full position keys. After those are generalized, it is the natural correctness reference for tiny multi-color games. Its complete-graph requirement makes it unsuitable as the default exhaustive strategy for the 24-piece preset. An interrupted expansion must still publish no speculative draws. The existing worker discards failed graph expansions; avoid repeatedly rebuilding the same oversized graph, or retain a budgeted frontier in a later improvement.
 
 ### Bounded proofs and optimized representation
 
@@ -84,7 +84,7 @@ Update all color-dependent reasoning, including the independent core proof verif
 
 ### Expected difficulty and useful symmetries
 
-More colors increase both branching and distinct board states, despite the preset using only 18 pieces. For illustration, for nine fixed occupied cells of one player, splitting them into three labeled colors with three each gives `9! / (3!³) = 1,680` assignments. Splitting both players gives 2,822,400 assignments before legality, termination and symmetry reductions. This is a combinatorial illustration, not a measured reachable-state count or runtime forecast.
+More colors increase both branching and distinct board states, even in the earlier 18-piece configuration. For illustration, for nine fixed occupied cells of one player, splitting them into three labeled colors with three each gives `9! / (3!³) = 1,680` assignments. Splitting both players gives 2,822,400 assignments before legality, termination and symmetry reductions. This is a combinatorial illustration, not a measured reachable-state count or runtime forecast.
 
 Keep the eight existing spatial symmetries, transforming the restriction with the board. Colors have no intrinsic rule differences, so consistent color relabeling is another useful equivalence: transform board labels, ownership and inventories together. Within a fixed three-each namespace, permutations of the three colors owned by each player provide up to 3! × 3! = 36 equivalent labelings; actual reduction depends on the position. Avoid naively trying every permutation at every node without measuring its cost. Unequal totals require special care: only namespace-preserving permutations can be used without changing the namespace too.
 

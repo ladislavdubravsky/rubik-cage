@@ -33,20 +33,20 @@ fn preset_offers_every_owned_color_and_only_spends_the_chosen_stock() {
     let root = GameState::multicolor();
     root.validate().unwrap();
     assert_eq!(root.legal_moves().len(), 31);
-    assert_eq!(root.inventories(), [3; 6]);
+    assert_eq!(root.inventories(), [4; 6]);
     assert_eq!(root.colors_for(0).count(), 3);
     assert_eq!(root.colors_for(1).count(), 3);
     let mut state = root;
     assert!(state.apply_move(drop(Cubie::Red, 0, 0)).is_err());
     assert_eq!(state, root);
     state.apply_move(drop(Cubie::Green, 0, 0)).unwrap();
-    assert_eq!(state.remaining(Cubie::Green), 2);
-    assert_eq!(state.remaining(Cubie::White), 3);
-    assert_eq!(state.remaining(Cubie::Blue), 3);
+    assert_eq!(state.remaining(Cubie::Green), 3);
+    assert_eq!(state.remaining(Cubie::White), 4);
+    assert_eq!(state.remaining(Cubie::Blue), 4);
     assert_eq!(state.player_to_move.id, 1);
     state.validate().unwrap();
     state.apply_move(drop(Cubie::Orange, 2, 2)).unwrap();
-    assert_eq!(state.remaining(Cubie::Orange), 2);
+    assert_eq!(state.remaining(Cubie::Orange), 3);
     state.validate().unwrap();
 }
 

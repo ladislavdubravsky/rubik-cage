@@ -17,7 +17,8 @@ fn now() -> f64 {
     web_sys::js_sys::Date::now()
 }
 fn fixtures() -> Vec<(&'static str, GameState)> {
-    let opening = GameState::multicolor();
+    // Keep the original three-per-color benchmark comparable to recorded runs.
+    let opening = GameState::with_colors(GameState::multicolor().color_owners, [3; 6]).unwrap();
     let mut mid = opening;
     for (color, column) in [
         (Cubie::White, (0, 0)),

@@ -229,7 +229,7 @@ try {
   };
   await preset('multi');
   assert.equal(await js('document.querySelectorAll(".settings-fields input").length'), 6);
-  assert(await js('[...document.querySelectorAll(".settings-fields input")].every(e => e.value === "3")'));
+  assert(await js('[...document.querySelectorAll(".settings-fields input")].every(e => e.value === "4")'));
   await clickButton('Cancel'); await delay(50);
   assert.deepEqual(await rows(), opening, 'canceling a preset preserves the current game');
   await preset('multi');
@@ -259,19 +259,19 @@ try {
   // Keyboard board interaction spends the selected exact color.
   await js(`document.querySelector('.slot[aria-label="Drop Green at 0,0"]').dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', bubbles:true}))`);
   await delay(80);
-  assert.match(await reserve('Green'), /Green: 2/);
-  assert.match(await reserve('White'), /White: 3/);
-  assert.match(await reserve('Blue'), /Blue: 3/);
+  assert.match(await reserve('Green'), /Green: 3/);
+  assert.match(await reserve('White'), /White: 4/);
+  assert.match(await reserve('Blue'), /Blue: 4/);
   assert.equal(await js(`document.querySelectorAll('.slot[aria-label="Green"]').length`), 1);
   await clickMove('Drop Orange at 2,2:');
-  assert.match(await reserve('Orange'), /Orange: 2/);
+  assert.match(await reserve('Orange'), /Orange: 3/);
   // Move previews use their own color even when a different color is selected.
   await js(`document.querySelector('.active-turn .color-selector[data-color="White"]').click()`);
   await js(`(() => { const row = [...document.querySelectorAll('.active-turn .move-list li')].find(e => e.textContent.startsWith('Drop Blue at 0,1:')); row.dispatchEvent(new MouseEvent('mouseenter', {bubbles:true})); })()`);
   await delay(60);
   assert(await js(`[...document.querySelectorAll('.slot.highlighted')].some(e => e.style.getPropertyValue('--highlight-color').trim() === 'var(--cubie-blue)')`));
   await clickButton('Undo last move'); await delay(60);
-  assert.match(await reserve('Orange'), /Orange: 3/);
+  assert.match(await reserve('Orange'), /Orange: 4/);
   assert.equal(await js('document.querySelectorAll(".slot.highlighted").length'), 0);
   await clickMove('Drop Yellow at 2,1:');
   // Export through the actual UI, then restart and import its bytes.
@@ -281,13 +281,13 @@ try {
   await js('window.open = window.__originalOpen');
   assert.equal(new TextDecoder().decode(new Uint8Array(multiBytes.slice(0, 8))), 'RCGPOS02');
   await clickButton('Restart the game'); await delay(60);
+  assert.match(await reserve('Green'), /Green: 4/);
+  assert.match(await reserve('Yellow'), /Yellow: 4/);
+  await importPosition(multiBytes);
   assert.match(await reserve('Green'), /Green: 3/);
   assert.match(await reserve('Yellow'), /Yellow: 3/);
-  await importPosition(multiBytes);
-  assert.match(await reserve('Green'), /Green: 2/);
-  assert.match(await reserve('Yellow'), /Yellow: 2/);
   await clickButton('Game settings'); await delay(60);
-  assert(await js('[...document.querySelectorAll(".settings-fields input")].every(e => e.value === "3")'), 'settings recover per-color initial inventories');
+  assert(await js('[...document.querySelectorAll(".settings-fields input")].every(e => e.value === "4")'), 'settings recover per-color initial inventories');
   await clickButton('Cancel');
 
   // Frozen v2 wire fixture: six colors, exclusive owners and exact reserves.

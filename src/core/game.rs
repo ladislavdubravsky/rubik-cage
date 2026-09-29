@@ -77,11 +77,11 @@ impl GameState {
         Self::with_colors(owners, remaining)
     }
 
-    /// Three distinct colors per player, three pieces of each color.
+    /// Three distinct colors per player, four pieces of each color.
     pub fn multicolor() -> Self {
         Self::with_colors(
             [Some(0), Some(1), Some(1), Some(1), Some(0), Some(0)],
-            [3; 6],
+            [4; 6],
         )
         .unwrap()
     }

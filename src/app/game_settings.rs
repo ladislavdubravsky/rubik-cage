@@ -107,7 +107,7 @@ pub fn game_settings(props: &GameSettingsProps) -> Html {
                     <label>{"Game preset"}
                         <select name="game-preset" onchange={preset}>
                             <option value="single" selected={!multi}>{"One color per player"}</option>
-                            <option value="multi" selected={multi}>{"Three colors each · three cubies per color"}</option>
+                            <option value="multi" selected={multi}>{"Three colors each · four cubies per color"}</option>
                         </select>
                     </label>
                     <p>{if multi { "Starting cubies per color (0–12); at most 24 per player." } else { "Starting cubies (0–12 each)" }}</p>

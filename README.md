@@ -12,7 +12,7 @@ In this project we solve the puzzle for some classes of initial conditions and c
 
 ## Exact rules
 
-There are two players. The default game gives each player one color; if they start with `m`, resp. `n` cubies, we call this a `(m, n)` game. The **Three colors each** preset gives each player three distinct colors, with three cubies of each color. A winning line must contain three cubies of **one exact color** owned by that player; mixed colors do not win. Players take turns and on each turn the player has three available moves:
+There are two players. The default game gives each player one color; if they start with `m`, resp. `n` cubies, we call this a `(m, n)` game. The **Three colors each** preset gives each player three distinct colors, with four cubies of each color. A winning line must contain three cubies of **one exact color** owned by that player; mixed colors do not win. Players take turns and on each turn the player has three available moves:
 
 - drop a cubie of any owned color that still has reserve pieces into one of the columns
 - rotate one of the layers 90 degrees clockwise or counter-clockwise
@@ -49,7 +49,7 @@ The workflow builds with pinned Trunk and locked dependencies, publishes `dist` 
 
 Click **Game settings** beneath the board to choose 0–12 starting cubies independently for each player. **Start new game** clears the board and undo history, gives P1 the first turn, and closes the panel. **Cancel** leaves the game unchanged; restarting preserves the chosen sizes.
 
-Choose **Three colors each · three cubies per color** in Game settings for multi-color play. P1 owns White, Blue and Green; P2 owns Yellow, Red and Orange. Starting counts can be adjusted separately for each color (0–12 each, at most 24 cubies per player). Select a color in the active player's panel, then click a column; keyboard users can focus a column and press Enter or Space. Move rows also identify the color and can be played directly. Exhausted colors are disabled; rotations and flips remain available when reserves run out.
+Choose **Three colors each · four cubies per color** in Game settings for multi-color play. P1 owns White, Blue and Green; P2 owns Yellow, Red and Orange. Starting counts can be adjusted separately for each color (0–12 each, at most 24 cubies per player). Select a color in the active player's panel, then click a column; keyboard users can focus a column and press Enter or Space. Move rows also identify the color and can be played directly. Exhausted colors are disabled; rotations and flips remain available when reserves run out.
 
 Multi-color games now evaluate in the background using a separate, color-aware exact solver. It can prove short wins and losses, per-color material draws, complete tiny games, and full-board endgames under the simulator’s continuation rules. Difficult positions—including the full three-colors-each opening—can remain **Unknown**. **Pause search** and **Continue search** control bounded background work; playing, undo, restart, export and import remain available. The existing two-color solver and bundled opening values are preserved. See [general search, proof rules and resource limits](docs/general-search.md) and [native/WASM optimization measurements](docs/search-performance.md).
 
