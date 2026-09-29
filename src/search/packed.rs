@@ -1,9 +1,11 @@
 //! Compact search-only positions. Inventories/colors are fixed by `Space`, so a
 //! 52-bit key is exact within that space. Public/persistent evaluation keys remain
 //! complete PositionKeys, never these context-dependent integers.
+use super::single_color::SingleColorState;
+use crate::core::cage::Cage;
 use crate::core::{
     cubie::Cubie,
-    game::{GameState, Player},
+    game::GameState,
     line::LINES,
     r#move::{Layer, Move, Rotation},
 };
@@ -70,21 +72,29 @@ pub struct Position(pub u64);
 
 impl Space {
     pub fn new(state: &GameState) -> Result<Self, &'static str> {
-        state.validate()?;
-        let mut totals = state.remaining_cubies;
-        for c in state.cage.grid.iter().flatten().flatten().flatten() {
-            totals[state.players.iter().position(|p| p.color == *c).unwrap()] += 1;
-        }
+        let state = SingleColorState::try_from(state)?;
         Ok(Self {
-            totals,
-            colors: state.players.map(|p| p.color),
+            totals: state.totals(),
+            colors: state.colors,
         })
     }
+    /// Fallible public boundary for callers whose game may not fit this backend.
+    pub fn try_encode(&self, state: &GameState) -> Result<Position, &'static str> {
+        let single = SingleColorState::try_from(state)?;
+        if single.colors != self.colors || single.totals() != self.totals {
+            return Err("Search space mismatch");
+        }
+        Ok(self.encode_single(single))
+    }
+
     pub fn encode(&self, state: &GameState) -> Position {
-        assert_eq!(Self::new(state).unwrap(), *self, "Search space mismatch");
-        self.encode_board(state)
+        self.try_encode(state)
+            .expect("Validated matching single-color search space")
     }
     pub(crate) fn encode_board(&self, state: &GameState) -> Position {
+        self.encode_single(SingleColorState::try_from(state).expect("Validated single-color state"))
+    }
+    fn encode_single(&self, state: SingleColorState) -> Position {
         let mut bits = 0;
         for (column, &(x, y)) in RING.iter().enumerate() {
             for z in 0..3 {
@@ -102,24 +112,19 @@ impl Space {
             }
             _ => unreachable!(),
         };
-        Position(bits | (u64::from(state.player_to_move.id) << 48) | (ban << 49)).canonical()
+        Position(bits | (u64::from(state.turn) << 48) | (ban << 49)).canonical()
     }
     pub fn decode(&self, pos: Position) -> GameState {
-        let mut state = GameState::new(self.totals[0], self.totals[1]);
-        state.players = [
-            Player {
-                id: 0,
-                color: self.colors[0],
-            },
-            Player {
-                id: 1,
-                color: self.colors[1],
-            },
-        ];
-        state.player_to_move = state.players[pos.turn() as usize];
+        let mut state = SingleColorState {
+            cage: Cage::new(),
+            colors: self.colors,
+            remaining: self.totals,
+            turn: pos.turn(),
+            last_move: None,
+        };
         for owner in 0..2 {
             let bits = pos.board(owner);
-            state.remaining_cubies[owner as usize] -= bits.count_ones() as u8;
+            state.remaining[owner as usize] -= bits.count_ones() as u8;
             for (column, &(x, y)) in RING.iter().enumerate() {
                 for z in 0..3 {
                     if bits & (1 << (z * 8 + column)) != 0 {
@@ -140,7 +145,7 @@ impl Space {
                 },
             }),
         };
-        state
+        state.into_current()
     }
     /// A necessary (not sufficient) earliest possible target victory.
     pub fn earliest(&self, pos: Position, target: u8) -> u8 {

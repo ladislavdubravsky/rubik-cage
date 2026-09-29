@@ -12,11 +12,10 @@ use serde::{Deserialize, Serialize};
     Clone, Copy, Debug, Eq, Hash, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Encode, Decode,
 )]
 pub struct Player {
-    pub color: Cubie,
     pub id: u8,
 }
 
-/// Two-player rules: simultaneous lines and endless play draw; immediate inverse forbidden.
+/// Two players; monochromatic lines win; simultaneous opposing lines and endless play draw.
 pub const RULES_VERSION: u32 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Encode, Decode)]
@@ -25,12 +24,14 @@ pub enum Outcome {
     Draw,
 }
 
-// TODO: enable more than 2 players and more than 1 color per player
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub struct GameState {
     pub cage: Cage,
     pub players: [Player; 2],
-    pub remaining_cubies: [u8; 2],
+    /// Exclusive ownership, indexed by Cubie. Unassigned colors have no pieces.
+    pub color_owners: [Option<u8>; 6],
+    /// Reserves per exact color, not per player.
+    pub remaining_cubies: [u8; 6],
     pub player_to_move: Player,
     pub zobrist_hash: u64,
     pub last_move: Option<Move>,
@@ -38,25 +39,93 @@ pub struct GameState {
 
 impl GameState {
     pub fn new(p1_cubies: u8, p2_cubies: u8) -> Self {
-        let players = [
-            Player {
-                color: Cubie::Blue,
-                id: 0,
-            },
-            Player {
-                color: Cubie::Red,
-                id: 1,
-            },
-        ];
-
+        let mut owners = [None; 6];
+        owners[Cubie::Blue as usize] = Some(0);
+        owners[Cubie::Red as usize] = Some(1);
+        let mut remaining = [0; 6];
+        remaining[Cubie::Blue as usize] = p1_cubies;
+        remaining[Cubie::Red as usize] = p2_cubies;
         Self {
             cage: Cage::new(),
-            players,
-            remaining_cubies: [p1_cubies, p2_cubies],
-            player_to_move: players[0],
+            players: [Player { id: 0 }, Player { id: 1 }],
+            color_owners: owners,
+            remaining_cubies: remaining,
+            player_to_move: Player { id: 0 },
             zobrist_hash: 0,
             last_move: None,
         }
+    }
+
+    pub fn with_colors(owners: [Option<u8>; 6], remaining: [u8; 6]) -> Result<Self, &'static str> {
+        let mut state = Self::new(0, 0);
+        state.color_owners = owners;
+        state.remaining_cubies = remaining;
+        state.validate()?;
+        Ok(state)
+    }
+
+    pub fn single_color(colors: [Cubie; 2], stocks: [u8; 2]) -> Result<Self, &'static str> {
+        if colors[0] == colors[1] {
+            return Err("Colors must have distinct owners");
+        }
+        let mut owners = [None; 6];
+        let mut remaining = [0; 6];
+        for id in 0..2 {
+            owners[colors[id] as usize] = Some(id as u8);
+            remaining[colors[id] as usize] = stocks[id];
+        }
+        Self::with_colors(owners, remaining)
+    }
+
+    /// Three distinct colors per player, three pieces of each color.
+    pub fn multicolor() -> Self {
+        Self::with_colors(
+            [Some(0), Some(1), Some(1), Some(1), Some(0), Some(0)],
+            [3; 6],
+        )
+        .unwrap()
+    }
+
+    pub fn owner(&self, color: Cubie) -> Option<u8> {
+        self.color_owners[color as usize]
+    }
+    pub fn remaining(&self, color: Cubie) -> u8 {
+        self.remaining_cubies[color as usize]
+    }
+    pub fn colors_for(&self, player: u8) -> impl Iterator<Item = Cubie> + '_ {
+        Cubie::ALL
+            .into_iter()
+            .filter(move |&c| self.owner(c) == Some(player))
+    }
+    /// None means the specialized solver cannot represent this configuration,
+    /// even when its additional assigned colors currently have zero pieces.
+    pub fn single_colors(&self) -> Option<[Cubie; 2]> {
+        let mut colors = [None; 2];
+        for c in Cubie::ALL {
+            if let Some(id) = self.owner(c) {
+                let slot = colors.get_mut(id as usize)?;
+                if slot.replace(c).is_some() {
+                    return None;
+                }
+            }
+        }
+        Some([colors[0]?, colors[1]?])
+    }
+    pub fn inventories(&self) -> [u8; 6] {
+        let mut totals = self.remaining_cubies;
+        for &color in self.cage.grid.iter().flatten().flatten().flatten() {
+            totals[color as usize] += 1;
+        }
+        totals
+    }
+    pub fn restarted(&self) -> Self {
+        let mut initial = *self;
+        initial.remaining_cubies = self.inventories();
+        initial.cage = Cage::new();
+        initial.player_to_move = initial.players[0];
+        initial.last_move = None;
+        initial.zobrist_hash = 0;
+        initial
     }
 
     pub fn legal_moves(&self) -> Vec<Move> {
@@ -64,78 +133,59 @@ impl GameState {
             return Vec::new();
         }
         let mut moves = Vec::new();
-
-        // Drops into non-full columns by the player to move. Allowed if the player still has
-        // cubies to drop.
-        if self.remaining_cubies[self.player_to_move.id as usize] > 0 {
+        for color in self
+            .colors_for(self.player_to_move.id)
+            .filter(|&c| self.remaining(c) > 0)
+        {
             for x in 0..3 {
                 for y in 0..3 {
-                    if Cage::is_center(x, y) {
-                        continue;
-                    }
-                    if self.cage.grid[x][y][2].is_none() {
+                    if !Cage::is_center(x, y) && self.cage.grid[x][y][2].is_none() {
                         moves.push(Move::Drop {
-                            color: self.player_to_move.color,
+                            color,
                             column: (x, y),
                         });
                     }
                 }
             }
         }
-
-        // Flip: allowed if not inverting the previous move
         if self.last_move != Some(Move::Flip) {
             moves.push(Move::Flip);
         }
-
-        // Rotations: allowed if not inverting the previous move
         for layer in [Layer::Down, Layer::Equator, Layer::Up] {
             for rotation in [Rotation::Clockwise, Rotation::CounterClockwise] {
-                let r#move = Move::RotateLayer { layer, rotation };
-                if self.last_move != r#move.inverse() {
-                    moves.push(r#move);
+                let m = Move::RotateLayer { layer, rotation };
+                if self.last_move != m.inverse() {
+                    moves.push(m);
                 }
             }
         }
-
         moves
     }
 
-    fn advance_player_to_move(&mut self) {
-        self.player_to_move = if self.player_to_move.id == 0 {
-            self.players[1]
-        } else {
-            self.players[0]
-        };
-    }
-
     /// The single transition used by play and search. Rejected moves are atomic.
-    pub fn apply_move(&mut self, r#move: Move) -> Result<(), &'static str> {
-        if !self.legal_moves().contains(&r#move) {
+    pub fn apply_move(&mut self, m: Move) -> Result<(), &'static str> {
+        if !self.legal_moves().contains(&m) {
             return Err("Illegal move");
         }
-        match r#move {
+        match m {
             Move::Drop { color, column } => {
                 self.cage.drop(color, column)?;
-                self.remaining_cubies[self.player_to_move.id as usize] -= 1;
+                self.remaining_cubies[color as usize] -= 1;
             }
             Move::Flip => self.cage.flip(),
             Move::RotateLayer { layer, rotation } => self.cage.rotate_layer(layer, rotation),
         }
-        self.last_move = Some(r#move);
-        self.advance_player_to_move();
+        self.last_move = Some(m);
+        self.player_to_move = self.players[1 - self.player_to_move.id as usize];
         self.rebuild_zobrist_hash();
         Ok(())
     }
 
-    /// Infinite play and simultaneous winning lines are draws (rules version 1).
     pub fn outcome(&self) -> Option<Outcome> {
         let mut wins = [false; 2];
         for (color, _) in self.cage.lines() {
-            for player in self.players {
-                if player.color == color {
-                    wins[player.id as usize] = true;
-                }
+            if let Some(owner) = self.owner(color).filter(|&id| id < 2) {
+                wins[owner as usize] = true;
             }
         }
         match wins {
@@ -146,43 +196,36 @@ impl GameState {
         }
     }
 
-    /// A representative winning line for rendering. Draws have no single winner.
-    pub fn won(&self) -> Option<(Player, Line)> {
+    /// A representative winning color and line. Draws have no single winner.
+    pub fn won(&self) -> Option<(Player, Cubie, Line)> {
         let Outcome::Win(id) = self.outcome()? else {
             return None;
         };
-        let player = self.players[id as usize];
         self.cage
             .lines()
-            .find(|(color, _)| *color == player.color)
-            .map(|(_, line)| (player, line))
+            .find(|(color, _)| self.owner(*color) == Some(id))
+            .map(|(color, line)| (self.players[id as usize], color, line))
     }
-
     pub fn normalize(&mut self) {
         *self = self.position_key().to_state();
     }
-
     pub fn position_key(&self) -> super::position::PositionKey {
         super::position::PositionKey::new(self)
     }
-
-    pub fn apply_move_normalize(&mut self, r#move: Move) -> Result<(), &'static str> {
-        self.apply_move(r#move)?;
+    pub fn apply_move_normalize(&mut self, m: Move) -> Result<(), &'static str> {
+        self.apply_move(m)?;
         self.normalize();
         Ok(())
     }
 
-    /// Validate untrusted imported states before using their indices or move history.
     pub fn validate(&self) -> Result<(), &'static str> {
-        if self.players[0].id != 0
-            || self.players[1].id != 1
-            || self.players[0].color == self.players[1].color
+        if self.players != [Player { id: 0 }, Player { id: 1 }]
             || self.player_to_move.id > 1
-            || self.player_to_move != self.players[self.player_to_move.id as usize]
+            || self.color_owners.iter().flatten().any(|&id| id > 1)
         {
-            return Err("Invalid players");
+            return Err("Invalid players or color ownership");
         }
-        let mut counts = [0u16; 2];
+        let mut counts = self.remaining_cubies.map(u16::from);
         for x in 0..3 {
             for y in 0..3 {
                 let mut empty = false;
@@ -193,18 +236,24 @@ impl GameState {
                             if Cage::is_center(x, y) || empty {
                                 return Err("Invalid cage or gravity");
                             }
-                            let Some(id) = self.players.iter().position(|p| p.color == color)
-                            else {
-                                return Err("Color does not belong to a player");
-                            };
-                            counts[id] += 1;
+                            counts[color as usize] += 1;
                         }
                     }
                 }
             }
         }
-        if (0..2).any(|i| counts[i] + self.remaining_cubies[i] as u16 > 24) {
-            return Err("Invalid inventory");
+        let mut totals = [0u16; 2];
+        for color in Cubie::ALL {
+            match self.owner(color) {
+                Some(id) => totals[id as usize] += counts[color as usize],
+                None if counts[color as usize] != 0 => {
+                    return Err("Color does not belong to a player");
+                }
+                None => (),
+            }
+        }
+        if totals.iter().any(|&n| n > 24) {
+            return Err("A player cannot have more than 24 cubies");
         }
         match self.last_move {
             Some(Move::Drop {
@@ -213,28 +262,25 @@ impl GameState {
             }) if x >= 3
                 || y >= 3
                 || Cage::is_center(x, y)
-                || color != self.players[1 - self.player_to_move.id as usize].color =>
+                || self.owner(color) != Some(1 - self.player_to_move.id) =>
             {
                 return Err("Invalid previous drop");
             }
             Some(Move::RotateLayer {
                 rotation: Rotation::HalfTurn,
                 ..
-            }) => {
-                return Err("Half turns are not legal moves");
-            }
-            _ => {}
+            }) => return Err("Half turns are not legal moves"),
+            _ => (),
         }
         Ok(())
     }
-
     pub(crate) fn rebuild_zobrist_hash(&mut self) {
         self.zobrist_hash = 0;
         for x in 0..3 {
             for y in 0..3 {
                 for z in 0..3 {
-                    if let Some(cubie) = self.cage.grid[x][y][z] {
-                        self.zobrist_hash ^= zobrist::POS_COLOR[cubie as usize][x][y][z];
+                    if let Some(c) = self.cage.grid[x][y][z] {
+                        self.zobrist_hash ^= zobrist::POS_COLOR[c as usize][x][y][z];
                     }
                 }
             }
@@ -266,7 +312,7 @@ mod tests {
         let legal_moves = game.legal_moves();
         assert!(legal_moves.len() == 14);
         assert!(!legal_moves.contains(&Move::Drop {
-            color: game.player_to_move.color,
+            color: game.single_colors().unwrap()[game.player_to_move.id as usize],
             column: (0, 0)
         }));
     }
@@ -275,19 +321,19 @@ mod tests {
     fn test_out_of_turn_drop_illegal() {
         let mut game = GameState::new(4, 4);
         game.apply_move(Move::Drop {
-            color: game.players[0].color,
+            color: Cubie::Blue,
             column: (1, 2),
         })
         .unwrap();
 
         // Now it's player 1's turn, so player 0 cannot drop a cubie
         assert!(!game.legal_moves().contains(&Move::Drop {
-            color: game.players[0].color,
+            color: Cubie::Blue,
             column: (1, 2)
         }));
         // Player 1 can
         assert!(game.legal_moves().contains(&Move::Drop {
-            color: game.players[1].color,
+            color: Cubie::Red,
             column: (1, 2)
         }));
     }
@@ -313,7 +359,7 @@ mod tests {
     fn test_no_drops_after_cubies_spent() {
         let mut game = GameState::new(1, 1);
         game.apply_move(Move::Drop {
-            color: game.player_to_move.color,
+            color: game.single_colors().unwrap()[game.player_to_move.id as usize],
             column: (0, 0),
         })
         .unwrap();
@@ -332,7 +378,7 @@ mod tests {
     fn test_zobrist_single_drop() {
         let mut game = GameState::new(2, 2);
         game.apply_move(Move::Drop {
-            color: game.player_to_move.color,
+            color: game.single_colors().unwrap()[game.player_to_move.id as usize],
             column: (0, 0),
         })
         .unwrap();
@@ -349,7 +395,7 @@ mod tests {
         let mut game1 = GameState::new(2, 2);
         game1
             .apply_move(Move::Drop {
-                color: game1.player_to_move.color,
+                color: game1.single_colors().unwrap()[game1.player_to_move.id as usize],
                 column: (0, 0),
             })
             .unwrap();
@@ -357,7 +403,7 @@ mod tests {
         let mut game2 = GameState::new(2, 2);
         game2
             .apply_move(Move::Drop {
-                color: game2.player_to_move.color,
+                color: game2.single_colors().unwrap()[game2.player_to_move.id as usize],
                 column: (2, 0),
             })
             .unwrap();

@@ -1,10 +1,14 @@
 //! One app-level scheduler owns all evaluation requests and publishes exact values.
-use super::agent::{AUTOMATIC_BATCHES, EvaluationTask, EvaluationTaskSpec, TaskStatus};
+use super::agent::{EvaluationTask, EvaluationTaskSpec, TaskStatus, batch_limits};
 use crate::{
     core::{game::GameState, position::PositionKey},
     search::{self, Evaluation, EvaluationMap, cache::Table},
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 use yew::{platform::spawn_local, prelude::*};
 use yew_agent::oneshot::use_oneshot_runner;
 
@@ -36,10 +40,10 @@ impl EvaluationContext {
         search::lookup_exact(&self.values.borrow(), state)
     }
     pub fn unknown_label(&self, root: PositionKey) -> &'static str {
-        if self.running == Some(root) {
-            "Calculating..."
-        } else if self.problem.as_ref().is_some_and(|(k, _, _)| *k == root) {
+        if self.problem.as_ref().is_some_and(|(k, _, _)| *k == root) {
             "Unknown (search paused)"
+        } else if self.running == Some(root) {
+            "Calculating..."
         } else if self.running.is_some() {
             "Queued..."
         } else {
@@ -61,10 +65,12 @@ pub fn evaluation_provider(props: &EvaluationProviderProps) -> Html {
     let running = use_state(|| None::<PositionKey>);
     let attempts = use_mut_ref(HashMap::<PositionKey, u8>::new);
     let paused = use_mut_ref(HashMap::<PositionKey, (String, bool)>::new);
+    let manually_paused = use_mut_ref(HashSet::<PositionKey>::new);
     let serial = use_mut_ref(|| 0u64);
     let runner = use_oneshot_runner::<EvaluationTask>();
     let state = *props.state;
     let key = state.position_key();
+    let (automatic_batches, max_batches) = batch_limits(&state);
     let missing = state.legal_moves().into_iter().any(|m| {
         let mut child = state;
         child.apply_move(m).unwrap();
@@ -76,6 +82,7 @@ pub fn evaluation_provider(props: &EvaluationProviderProps) -> Html {
         let running = running.clone();
         let attempts = attempts.clone();
         let paused = paused.clone();
+        let manually_paused = manually_paused.clone();
         use_effect_with((key, *revision, *running), move |_| {
             if running.is_none() && missing && !paused.borrow().contains_key(&key) {
                 let batch = *attempts.borrow().get(&key).unwrap_or(&0);
@@ -104,12 +111,16 @@ pub fn evaluation_provider(props: &EvaluationProviderProps) -> Html {
                     match status {
                         TaskStatus::Complete => {
                             attempts.borrow_mut().remove(&key);
+                            manually_paused.borrow_mut().remove(&key);
                             paused.borrow_mut().remove(&key);
                         }
                         TaskStatus::Continuing => {
-                            paused.borrow_mut().remove(&key);
+                            if !manually_paused.borrow().contains(&key) {
+                                paused.borrow_mut().remove(&key);
+                            }
                         }
                         TaskStatus::Paused { reason, can_resume } => {
+                            manually_paused.borrow_mut().remove(&key);
                             paused.borrow_mut().insert(key, (reason, can_resume));
                         }
                         TaskStatus::Failed(message) => {
@@ -158,27 +169,50 @@ pub fn evaluation_provider(props: &EvaluationProviderProps) -> Html {
         let attempts = attempts.clone();
         let paused = paused.clone();
         let revision = revision.clone();
+        let manually_paused = manually_paused.clone();
         Callback::from(move |_| {
             // A new work allowance also raises the retained-position budget.
             let next = *attempts.borrow().get(&key).unwrap_or(&0);
-            attempts
-                .borrow_mut()
-                .insert(key, next.div_ceil(AUTOMATIC_BATCHES) * AUTOMATIC_BATCHES);
+            if !manually_paused.borrow_mut().remove(&key) {
+                attempts
+                    .borrow_mut()
+                    .insert(key, next.div_ceil(automatic_batches) * automatic_batches);
+            }
             paused.borrow_mut().remove(&key);
+            revision.set(*revision + 1);
+        })
+    };
+    let pause = {
+        let paused = paused.clone();
+        let manually_paused = manually_paused.clone();
+        let revision = revision.clone();
+        Callback::from(move |_| {
+            manually_paused.borrow_mut().insert(key);
+            paused.borrow_mut().insert(
+                key,
+                (
+                    "Search paused. The current batch will finish; unsolved moves remain unknown."
+                        .into(),
+                    batch_number < max_batches,
+                ),
+            );
             revision.set(*revision + 1);
         })
     };
     html! {
         <ContextProvider<EvaluationContext> context={context}>
             { for props.children.iter() }
-            if missing && *running == Some(key) {
-                <p role="status">{ format!("Calculating… batch {batch_number}.") }</p>
-            } else if let Some((_, message, can_resume)) = message {
+            if let Some((_, message, can_resume)) = message {
                 <div class="search-status" role="status">
                     <p>{message}</p>
                     if can_resume {
                         <button type="button" class="control-button" onclick={resume} disabled={running.is_some()}>{"Continue search"}</button>
                     }
+                </div>
+            } else if missing && *running == Some(key) {
+                <div class="search-status" role="status">
+                    <p>{ format!("Calculating… batch {batch_number}.") }</p>
+                    <button type="button" class="control-button" onclick={pause}>{"Pause search"}</button>
                 </div>
             } else if missing && running.is_some() {
                 <p role="status">{"Queued; waiting for the current search batch."}</p>

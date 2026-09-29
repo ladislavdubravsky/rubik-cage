@@ -1,7 +1,7 @@
 // Run against a built app: node scripts/browser_smoke.mjs http://127.0.0.1:8080/rubik-cage/
 // Uses Chrome's debugging protocol and Node built-ins; no npm dependencies.
 import {spawn} from 'node:child_process';
-import {mkdtemp, readFile, rm} from 'node:fs/promises';
+import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import assert from 'node:assert/strict';
@@ -160,8 +160,13 @@ try {
     await js(`(() => { const e = document.querySelector('[name="p${player}-cubies"]'); e.value = ${JSON.stringify(String(value))}; e.dispatchEvent(new Event('input', {bubbles:true})); })()`);
     await delay(30);
   };
+  const assertPresetMatchesFields = async () => {
+    const fields = await js('document.querySelectorAll(".settings-fields input").length');
+    assert.equal(await js(`document.querySelector('[name="game-preset"]').value`), fields === 2 ? 'single' : 'multi', 'preset agrees with starting-stock fields on opening');
+  };
   const chooseGame = async (m, n) => {
     await clickButton('Game settings'); await delay(50);
+    await assertPresetMatchesFields();
     await settingsInput(1, m); await settingsInput(2, n);
     await clickButton('Start new game'); await delay(60);
     assert.equal(await js('!!document.querySelector("#game-settings-panel")'), false);
@@ -171,6 +176,7 @@ try {
     assert(await js('document.querySelector(".player-panel:first-child").classList.contains("active-turn")'));
   };
   await clickButton('Game settings'); await delay(50);
+  await assertPresetMatchesFields();
   for (const invalid of [13, -1, 2.5, '']) {
     await settingsInput(1, invalid);
     assert(await js('document.querySelector("#game-settings-panel button[type=submit]").disabled'));
@@ -213,8 +219,134 @@ try {
   await chooseGame(12, 12);
   assert.deepEqual(await rows(), opening, 'returning to standard size reuses the standard table');
   assert.equal(workers.size, 1, 'settings reuse the existing worker');
+  // Preset selection and its starting-stock controls stay synchronized.
+  const preset = async value => {
+    await clickButton('Game settings'); await delay(50);
+    await assertPresetMatchesFields();
+    await js(`(() => { const e = document.querySelector('[name="game-preset"]'); e.value = ${JSON.stringify(value)}; e.dispatchEvent(new Event('change', {bubbles:true})); })()`);
+    await delay(50);
+    await assertPresetMatchesFields();
+  };
+  await preset('multi');
+  assert.equal(await js('document.querySelectorAll(".settings-fields input").length'), 6);
+  assert(await js('[...document.querySelectorAll(".settings-fields input")].every(e => e.value === "3")'));
+  await clickButton('Cancel'); await delay(50);
+  assert.deepEqual(await rows(), opening, 'canceling a preset preserves the current game');
+  await preset('multi');
+  await clickButton('Start new game'); await delay(80);
+  await enableLists();
+  assert.equal((await rows()).length, 31);
+  assert((await rows()).some(r => /Unknown|Calculating|Queued/.test(r)));
+  await wait('document.body.innerText.includes("Calculating")', 'general search starts in the shared worker');
+  await clickButton('Pause search');
+  await wait('[...document.querySelectorAll("button")].some(b => b.textContent === "Continue search" && !b.disabled)', 'manual pause finishes its short batch');
+  assert((await rows()).some(r => r.includes('Unknown (search paused)')));
+  await clickButton('Continue search');
+  await wait('document.body.innerText.includes("Calculating")', 'general search resumes');
+  assert.equal(await js('document.querySelectorAll(".color-selector").length'), 6);
+  if (process.env.MULTICOLOR_SCREENSHOT) {
+    await writeFile(process.env.MULTICOLOR_SCREENSHOT, Buffer.from((await call('Page.captureScreenshot', {captureBeyondViewport: true})).data, 'base64'));
+    await call('Emulation.setDeviceMetricsOverride', {width:1400, height:1000, deviceScaleFactor:1, mobile:false});
+    await writeFile(process.env.MULTICOLOR_SCREENSHOT.replace(/\.png$/, '.desktop.png'), Buffer.from((await call('Page.captureScreenshot', {captureBeyondViewport:true})).data, 'base64'));
+    await call('Emulation.clearDeviceMetricsOverride');
+  }
+  const cssColors = await js(`[...document.querySelectorAll('.color-selector .cubie-icon')].map(e => getComputedStyle(e).backgroundColor)`);
+  assert.equal(new Set(cssColors).size, 6, 'all six colors have distinct rendered styles');
+  const reserve = color => js(`document.querySelector('.color-reserve[data-color="${color}"] .color-selector').textContent`);
+  await js(`document.querySelector('.active-turn .color-selector[data-color="Green"]').click()`);
+  await delay(40);
+  assert(await js(`document.querySelector('.slot[aria-label="Drop Green at 0,0"]') !== null`));
+  // Keyboard board interaction spends the selected exact color.
+  await js(`document.querySelector('.slot[aria-label="Drop Green at 0,0"]').dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', bubbles:true}))`);
+  await delay(80);
+  assert.match(await reserve('Green'), /Green: 2/);
+  assert.match(await reserve('White'), /White: 3/);
+  assert.match(await reserve('Blue'), /Blue: 3/);
+  assert.equal(await js(`document.querySelectorAll('.slot[aria-label="Green"]').length`), 1);
+  await clickMove('Drop Orange at 2,2:');
+  assert.match(await reserve('Orange'), /Orange: 2/);
+  // Move previews use their own color even when a different color is selected.
+  await js(`document.querySelector('.active-turn .color-selector[data-color="White"]').click()`);
+  await js(`(() => { const row = [...document.querySelectorAll('.active-turn .move-list li')].find(e => e.textContent.startsWith('Drop Blue at 0,1:')); row.dispatchEvent(new MouseEvent('mouseenter', {bubbles:true})); })()`);
+  await delay(60);
+  assert(await js(`[...document.querySelectorAll('.slot.highlighted')].some(e => e.style.getPropertyValue('--highlight-color').trim() === 'var(--cubie-blue)')`));
+  await clickButton('Undo last move'); await delay(60);
+  assert.match(await reserve('Orange'), /Orange: 3/);
+  assert.equal(await js('document.querySelectorAll(".slot.highlighted").length'), 0);
+  await clickMove('Drop Yellow at 2,1:');
+  // Export through the actual UI, then restart and import its bytes.
+  await js(`window.__originalOpen = window.open; window.open = url => { window.__positionBytes = fetch(url).then(r => r.arrayBuffer()).then(b => [...new Uint8Array(b)]); return null; }`);
+  await clickButton('Export position');
+  const multiBytes = await js('window.__positionBytes');
+  await js('window.open = window.__originalOpen');
+  assert.equal(new TextDecoder().decode(new Uint8Array(multiBytes.slice(0, 8))), 'RCGPOS02');
+  await clickButton('Restart the game'); await delay(60);
+  assert.match(await reserve('Green'), /Green: 3/);
+  assert.match(await reserve('Yellow'), /Yellow: 3/);
+  await importPosition(multiBytes);
+  assert.match(await reserve('Green'), /Green: 2/);
+  assert.match(await reserve('Yellow'), /Yellow: 2/);
+  await clickButton('Game settings'); await delay(60);
+  assert(await js('[...document.querySelectorAll(".settings-fields input")].every(e => e.value === "3")'), 'settings recover per-color initial inventories');
+  await clickButton('Cancel');
+
+  // Frozen v2 wire fixture: six colors, exclusive owners and exact reserves.
+  function multiPosition(bottom, remaining = [3,3,3,3,3,3]) {
+    const bytes = [...new TextEncoder().encode('RCGPOS02'), 1];
+    const codes = {W:0, Y:1, R:2, O:3, B:4, G:5};
+    for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) for (let z = 0; z < 3; z++) {
+      const c = z === 0 ? bottom[y * 3 + x] : '.';
+      c === '.' ? bytes.push(0) : bytes.push(1, codes[c]);
+    }
+    for (const owner of [0,1,1,1,0,0]) bytes.push(1, owner);
+    bytes.push(...remaining, 0, 0); // P1 turn, no previous move
+    return bytes;
+  }
+  // Mixed material is insufficient even though each player has several cubies.
+  await importPosition(multiPosition('.........', [2,2,2,2,2,2]));
+  await wait('[...document.querySelectorAll(".active-turn .move-list li")].length === 31 && [...document.querySelectorAll(".active-turn .move-list li")].every(e => e.textContent.endsWith("Draw"))', 'per-color material draw');
+  // A nonterminal exact result from the general worker, not a bundled table.
+  await importPosition(multiPosition('.........', [3,0,0,0,0,0]));
+  await wait('[...document.querySelectorAll(".active-turn .move-list li")].some(e => e.textContent === "Drop White at 0,0: Win in 5")', 'general nonterminal five-ply win');
+  // Only one Green left: exhausting it selects another available owned color.
+  await importPosition(multiPosition('.........', [0,0,0,0,3,1]));
+  await js(`document.querySelector('.active-turn .color-selector[data-color="Green"]').click()`);
+  await delay(30); await clickMove('Drop Green at 0,0:');
+  await clickMove('Flip:');
+  assert(await js(`document.querySelector('.active-turn .color-selector[data-color="Green"]').disabled`));
+  assert(await js(`document.querySelector('.active-turn .color-selector[data-color="Blue"]').getAttribute('aria-pressed') === 'true'`));
+  assert(!(await rows()).some(r => r.startsWith('Drop Green')));
+  assert((await rows()).some(r => r.startsWith('Drop Blue')));
+  await clickButton('Undo last move'); await clickButton('Undo last move'); await delay(60);
+  assert(await js(`document.querySelector('.active-turn .color-selector[data-color="Green"]').getAttribute('aria-pressed') === 'true'`));
+
+  await importPosition(multiPosition('WBG......', [2,3,3,3,2,2]));
+  assert.equal(await js('!!document.querySelector(".cage > h2")'), false, 'mixed owned colors do not win');
+  await importPosition(multiPosition('GG.......', [3,3,3,3,3,1]));
+  assert((await rows()).includes('Drop Green at 2,0: Win in 1'), 'terminal move values remain available');
+  await clickMove('Drop Green at 2,0:');
+  assert(await js('document.body.innerText.includes("Player 1 wins with Green!")'));
+  assert.equal(await js('document.querySelectorAll(".winning-line").length'), 3);
+  await importPosition(multiPosition('WWW...BBB', [0,3,3,3,0,3]));
+  assert(await js('document.body.innerText.includes("Player 1 wins with")'), 'two winning colors owned by one player are a win');
+  await importPosition(multiPosition('WWW...RRR', [0,3,0,3,3,3]));
+  assert(await js('document.body.innerText.includes("Draw: both players have a line.")'));
+
+  // Switch from active classic search to multi-color play, then back to the table.
+  await preset('single'); await clickButton('Start new game'); await delay(60);
+  await chooseGame(6, 5);
+  await wait('document.body.innerText.includes("Calculating")', 'background work before multi-color switch');
+  await preset('multi'); await clickButton('Start new game'); await delay(80);
+  assert((await rows()).some(r => /Unknown|Calculating|Queued/.test(r)));
+  await clickMove('Drop Blue at 0,0:');
+  await clickButton('Undo last move'); await delay(60);
+  assert.equal((await rows()).length, 31);
+  await preset('single'); await clickButton('Start new game'); await delay(80);
+  assert.deepEqual(await rows(), opening, 'classic table survives multi-color play and pending requests');
+  assert.equal(workers.size, 1, 'multi-color play does not spawn another worker');
+
   assert.deepEqual(exceptions, [], 'browser runtime exceptions');
-  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw, custom settings, complete 3,3 opening, player-swap reuse, automatic and explicit continuation, inventory switching');
+  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw, custom settings, complete 3,3 opening, player-swap reuse, automatic and explicit continuation, inventory switching, multi-color selection/stocks/keyboard/previews/export/import/wins/general-search/material-draw/pause/resume/Unknown/switching');
 } finally {
   ws?.close();
   const exited = chrome.exitCode !== null ? Promise.resolve() : new Promise(resolve => chrome.once('exit', resolve));

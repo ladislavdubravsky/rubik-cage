@@ -6,6 +6,7 @@ use super::{
     Evaluation, EvaluationMap,
     packed::{POSITION_MASK, Position, Space},
 };
+use crate::compat::{SINGLE_COLOR_RULES, SpaceV1};
 use crate::core::game::GameState;
 use bincode::{Decode, Encode};
 use std::collections::{BTreeSet, HashMap, VecDeque};
@@ -29,7 +30,7 @@ impl Bounds {
     }
 }
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug)]
 pub struct Proof {
     magic: [u8; 8],
     rules: u32,
@@ -66,7 +67,7 @@ impl Search {
         Ok(Self {
             proof: Proof {
                 magic: *b"RCGPRF02",
-                rules: crate::core::game::RULES_VERSION,
+                rules: SINGLE_COLOR_RULES,
                 space: Space::new(state).map_err(str::to_owned)?,
                 bounds: HashMap::new(),
                 safe: BTreeSet::new(),
@@ -179,7 +180,7 @@ impl Search {
         if let Some(value) = Evaluation::terminal(state) {
             return Ok(Some(value));
         }
-        let pos = self.proof.space.encode(state);
+        let pos = self.proof.space.try_encode(state).map_err(str::to_owned)?;
         if (0..2).all(|target| self.proof.prevents_win(pos, target)) {
             return Ok(Some(Evaluation::Draw));
         }
@@ -202,7 +203,7 @@ impl Proof {
     /// False bounds are monotone in the horizon; all witness queries decrease the
     /// requested horizon, even when a stronger cached bound is used as evidence.
     pub fn verify(&self) -> Result<(), String> {
-        if self.magic != *b"RCGPRF02" || self.rules != crate::core::game::RULES_VERSION {
+        if self.magic != *b"RCGPRF02" || self.rules != SINGLE_COLOR_RULES {
             return Err("Incompatible proof".into());
         }
         if self.space.totals.iter().any(|n| *n > 24) || self.space.colors[0] == self.space.colors[1]
@@ -433,9 +434,9 @@ impl Proof {
             .iter()
             .flatten()
             .flatten()
-            .filter(|c| **c == Some(state.players[target as usize].color))
+            .filter(|c| **c == Some(self.space.colors[target as usize]))
             .count();
-        if count + usize::from(state.remaining_cubies[target as usize]) < 3 {
+        if count + usize::from(state.remaining(self.space.colors[target as usize])) < 3 {
             return Some(false);
         }
         let missing = 3usize.saturating_sub(count);
@@ -472,43 +473,75 @@ impl Proof {
         }
         values
     }
-    pub fn save(&self, path: &str) -> Result<(), String> {
-        // Struct fields and this tuple have the same bincode representation.
-        // Sort map entries so repeated precomputations produce identical bytes.
-        let ordered: std::collections::BTreeMap<_, _> =
-            self.bounds.iter().map(|(&k, &v)| (k, v)).collect();
-        let bytes = bincode::encode_to_vec(
-            (self.magic, self.rules, self.space, ordered, &self.safe),
+    /// Stable two-color proof format, independent of the live search structs.
+    pub fn encode(&self) -> Result<Vec<u8>, String> {
+        self.verify()?;
+        let ordered: std::collections::BTreeMap<_, _> = self
+            .bounds
+            .iter()
+            .map(|(&key, b)| (key, (b.not_within, b.within)))
+            .collect();
+        bincode::encode_to_vec(
+            (
+                self.magic,
+                self.rules,
+                SpaceV1::from_current(self.space),
+                ordered,
+                &self.safe,
+            ),
             bincode::config::standard(),
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())
+    }
+    pub fn save(&self, path: &str) -> Result<(), String> {
+        let bytes = self.encode()?;
         let tmp = format!("{path}.tmp");
         std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
         std::fs::rename(tmp, path).map_err(|e| e.to_string())
     }
     pub fn load(path: &str) -> Result<Self, String> {
-        let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+        Self::decode(&std::fs::read(path).map_err(|e| e.to_string())?)
+    }
+    pub fn decode(bytes: &[u8]) -> Result<Self, String> {
+        // Decode maps/sets as entry lists so duplicate or conflicting claims cannot
+        // silently overwrite one another. Their bincode layouts are identical.
+        type BoundEntries = Vec<(u64, (u8, u8))>;
+        type V1 = ([u8; 8], u32, SpaceV1, BoundEntries);
+        type V2 = ([u8; 8], u32, SpaceV1, BoundEntries, Vec<u64>);
         let config = bincode::config::standard().with_limit::<536870912>();
-        let (proof, used): (Self, usize) = if bytes.starts_with(b"RCGPRF01") {
-            // Version 1 had horizon bounds only. Its claims remain valid.
-            type Legacy = ([u8; 8], u32, Space, HashMap<u64, Bounds>);
-            let ((_, rules, space, bounds), used): (Legacy, usize) =
-                bincode::decode_from_slice(&bytes, config).map_err(|e| e.to_string())?;
-            (
-                Self {
-                    magic: *b"RCGPRF02",
-                    rules,
-                    space,
-                    bounds,
-                    safe: BTreeSet::new(),
-                },
-                used,
-            )
+        let ((_, rules, space, bounds, safe), used): (V2, usize) = if bytes.starts_with(b"RCGPRF01")
+        {
+            let ((magic, rules, space, bounds), used): (V1, usize) =
+                bincode::decode_from_slice(bytes, config).map_err(|e| e.to_string())?;
+            ((magic, rules, space, bounds, Vec::new()), used)
+        } else if bytes.starts_with(b"RCGPRF02") {
+            bincode::decode_from_slice(bytes, config).map_err(|e| e.to_string())?
         } else {
-            bincode::decode_from_slice(&bytes, config).map_err(|e| e.to_string())?
+            return Err("Incompatible proof".into());
         };
         if used != bytes.len() {
             return Err("Trailing proof data".into());
+        }
+        let mut proof = Self {
+            magic: *b"RCGPRF02",
+            rules,
+            space: space.into_current().map_err(str::to_owned)?,
+            bounds: HashMap::new(),
+            safe: BTreeSet::new(),
+        };
+        for (key, (not_within, within)) in bounds {
+            if proof
+                .bounds
+                .insert(key, Bounds { not_within, within })
+                .is_some()
+            {
+                return Err("Duplicate proof bound".into());
+            }
+        }
+        for key in safe {
+            if !proof.safe.insert(key) {
+                return Err("Duplicate safety claim".into());
+            }
         }
         proof.verify()?;
         Ok(proof)
@@ -519,6 +552,26 @@ impl Proof {
 mod tests {
     use super::*;
     use crate::search::retrograde;
+    #[test]
+    fn proof_reader_rejects_duplicate_bounds_and_safety_claims() {
+        let space = SpaceV1::from_current(Space::new(&GameState::new(1, 1)).unwrap());
+        for (bounds, safe, expected) in [
+            (
+                vec![(0u64, (0u8, 255u8)), (0, (0, 255))],
+                vec![],
+                "Duplicate proof bound",
+            ),
+            (vec![], vec![0u64, 0], "Duplicate safety claim"),
+        ] {
+            let bytes = bincode::encode_to_vec(
+                (*b"RCGPRF02", SINGLE_COLOR_RULES, space, bounds, safe),
+                bincode::config::standard(),
+            )
+            .unwrap();
+            assert_eq!(Proof::decode(&bytes).unwrap_err(), expected);
+        }
+    }
+
     #[test]
     fn horizons_and_certificates_agree_with_complete_graphs() {
         for (a, b) in [(1, 1), (3, 0), (0, 3), (3, 1), (3, 2)] {

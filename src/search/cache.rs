@@ -1,12 +1,13 @@
 //! Versioned, deterministic storage for exact evaluations. Legacy hash tables are rejected.
 use super::{Evaluation, EvaluationMap, retrograde};
+use crate::compat::{EvaluationV1, KeyV1};
 use crate::core::position::PositionKey;
 use bincode::{Decode, Encode};
 use std::{fs, io::Write, path::Path};
 
 const MAGIC: [u8; 8] = *b"RCGEVAL1";
 /// v1: two players; simultaneous lines and infinite play draw; no immediate inverse.
-pub use crate::core::game::RULES_VERSION;
+pub const RULES_VERSION: u32 = crate::compat::SINGLE_COLOR_RULES;
 const KEY_VERSION: u32 = 1;
 const SOLVER_VERSION: u32 = 1;
 
@@ -24,6 +25,12 @@ pub struct Table {
 }
 
 #[derive(Encode, Decode)]
+enum CoverageV1 {
+    Complete,
+    Subset,
+}
+
+#[derive(Encode, Decode)]
 struct File {
     magic: [u8; 8],
     rules: u32,
@@ -32,9 +39,9 @@ struct File {
     /// Number of individual plies; terminal distance = 0.
     distance_version: u32,
     generator: String,
-    roots: Vec<PositionKey>,
-    coverage: Coverage,
-    entries: Vec<(PositionKey, Evaluation)>,
+    roots: Vec<KeyV1>,
+    coverage: CoverageV1,
+    entries: Vec<(KeyV1, EvaluationV1)>,
 }
 
 impl Table {
@@ -83,7 +90,12 @@ impl Table {
 
     pub fn encode(&self) -> Result<Vec<u8>, String> {
         self.verify()?;
-        let mut entries: Vec<_> = self.values.iter().map(|(&k, &v)| (k, v)).collect();
+        let mut entries: Vec<_> = self
+            .values
+            .iter()
+            .map(|(&k, &v)| Ok((KeyV1::from_current(k)?, EvaluationV1::from(v))))
+            .collect::<Result<_, &str>>()
+            .map_err(str::to_owned)?;
         entries.sort_by_key(|(k, _)| *k);
         let file = File {
             magic: MAGIC,
@@ -97,8 +109,17 @@ impl Table {
                 " verified-exact-v1"
             )
             .into(),
-            roots: self.roots.clone(),
-            coverage: self.coverage,
+            roots: self
+                .roots
+                .iter()
+                .copied()
+                .map(KeyV1::from_current)
+                .collect::<Result<_, _>>()
+                .map_err(str::to_owned)?,
+            coverage: match self.coverage {
+                Coverage::Complete => CoverageV1::Complete,
+                Coverage::Subset => CoverageV1::Subset,
+            },
             entries,
         };
         bincode::encode_to_vec(file, bincode::config::standard()).map_err(|e| e.to_string())
@@ -125,13 +146,23 @@ impl Table {
         }
         let mut values = EvaluationMap::new();
         for (key, value) in file.entries {
+            let key = key.into_current().map_err(str::to_owned)?;
+            let value = value.into_current().map_err(str::to_owned)?;
             if values.insert(key, value).is_some() {
                 return Err("Duplicate evaluation key".into());
             }
         }
         let table = Self {
-            roots: file.roots,
-            coverage: file.coverage,
+            roots: file
+                .roots
+                .into_iter()
+                .map(KeyV1::into_current)
+                .collect::<Result<_, _>>()
+                .map_err(str::to_owned)?,
+            coverage: match file.coverage {
+                CoverageV1::Complete => Coverage::Complete,
+                CoverageV1::Subset => Coverage::Subset,
+            },
             values,
         };
         table.verify()?;
@@ -170,7 +201,7 @@ mod tests {
     use crate::{
         core::game::GameState,
         search::{
-            merge_exact,
+            Evaluation, merge_exact,
             retrograde::{Limits, solve},
         },
     };

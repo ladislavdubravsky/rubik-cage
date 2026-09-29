@@ -4,7 +4,10 @@ use crate::{
         hovered_move::use_hovered_move,
         utils::{self, apply_move_callback},
     },
-    core::game::{GameState, Player},
+    core::{
+        cubie::Cubie,
+        game::{GameState, Player},
+    },
     search::Evaluation,
 };
 use std::rc::Rc;
@@ -16,6 +19,7 @@ pub struct PlayerPanelProps {
     pub player: Player,
     pub game_state: UseStateHandle<GameState>,
     pub history: UseStateHandle<Vec<GameState>>,
+    pub selected_colors: UseStateHandle<[Option<Cubie>; 2]>,
 }
 
 pub(crate) fn eval_to_string(eval: Option<Evaluation>, player_id: u8, unknown: &str) -> String {
@@ -49,13 +53,13 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
     let is_won = props.game_state.outcome().is_some();
     let apply_move = apply_move_callback(props.game_state.clone(), props.history.clone(), is_won);
 
-    let cubies = (0..props.game_state.remaining_cubies[props.player.id as usize]).map(|i| {
-        html! {
-            <div class={classes!("cubie-icon", props.player.color.to_string())} key={i} />
-        }
-    });
-
-    let highlight_color = utils::slot_to_css(Some(props.player.color));
+    let selected = utils::selected_color(
+        &props.game_state,
+        props.player.id,
+        props.selected_colors[props.player.id as usize],
+    );
+    let highlight_color = utils::slot_to_css(selected);
+    let multicolor = props.game_state.single_colors().is_none();
 
     let moves = if props.game_state.outcome().is_some() {
         Vec::new() // Don't show further moves if game is finished
@@ -82,9 +86,41 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
         <div class={classes!("player-panel", if is_turn { "active-turn" } else { "" })}>
             <h2>{ format!("Player {}", props.player.id + 1) }</h2>
             <p>{ "Remaining cubies:" }</p>
-            <div class="cubies-remaining">
-                { for cubies }
+            <div class="color-reserves" role="group" aria-label={format!("Player {} colors", props.player.id + 1)}>
+                { for props.game_state.colors_for(props.player.id).map(|color| {
+                    let count = props.game_state.remaining(color);
+                    let select = {
+                        let selected_colors = props.selected_colors.clone();
+                        let set_hovered_move = set_hovered_move.clone();
+                        let id = props.player.id as usize;
+                        Callback::from(move |_| {
+                            let mut next = *selected_colors;
+                            next[id] = Some(color);
+                            selected_colors.set(next);
+                            set_hovered_move.emit(None);
+                        })
+                    };
+                    html! {
+                        <div class="color-reserve" data-color={color.to_string()}>
+                            if multicolor {
+                                <button type="button" class="color-selector" data-color={color.to_string()}
+                                    aria-label={format!("Select {color}, {count} remaining")}
+                                    aria-pressed={(selected == Some(color)).to_string()}
+                                    disabled={!is_turn || is_won || count == 0} onclick={select}>
+                                    <span class={classes!("cubie-icon", color.to_string())} aria-hidden="true" />
+                                    {format!("{color}: {count}")}
+                                </button>
+                            }
+                            <div class="cubies-remaining" aria-label={format!("{count} {color} cubies remaining")}>
+                                {for (0..count).map(|i| html! { <div class={classes!("cubie-icon", color.to_string())} key={i} /> })}
+                            </div>
+                        </div>
+                    }
+                }) }
             </div>
+            if multicolor && is_turn && !is_won {
+                <p class="selection-status">{selected.map(|c| format!("Place {c}: choose a column.")).unwrap_or_else(|| "No cubies left. Rotate a layer or flip the cage.".into())}</p>
+            }
             <label>
                 <input
                     type="checkbox"
@@ -109,6 +145,7 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                                 let label = eval_to_string(eval.get(&new_state), props.game_state.player_to_move.id, eval.unknown_label(props.game_state.position_key()));
                                 let is_hovered = hovered_move.0.as_ref().map_or(false, |h| h.as_ref() == mv);
                                 let mv = mv.clone();
+                                let highlight_color = match mv { crate::core::r#move::Move::Drop { color, .. } => utils::slot_to_css(Some(color)), _ => highlight_color };
                                 html! {
                                     <li
                                         class={if is_hovered { "move-highlighted" } else { "" }}
@@ -124,7 +161,7 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                                             move |_| set_hovered_move.emit(None)
                                         }}
                                     >
-                                        { format!("{}: {}", mv, label) }
+                                        { format!("{}: {}", utils::move_label(&props.game_state, mv), label) }
                                     </li>
                                 }
                             })}

@@ -1,8 +1,14 @@
 //! Exact graph minimax. The historical `naive.rs` is deliberately not compiled.
 pub mod bounded;
 pub mod cache;
+pub mod general;
+pub mod general_compact;
+mod general_graph;
+#[cfg(feature = "search-audit")]
+pub mod general_reference;
 pub mod packed;
 pub mod retrograde;
+mod single_color;
 
 use crate::core::{
     game::{GameState, Outcome},

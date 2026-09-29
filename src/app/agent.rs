@@ -20,6 +20,14 @@ pub struct EvaluationTaskSpec {
 pub const AUTOMATIC_BATCHES: u8 = 8;
 pub const MAX_BATCHES: u8 = 32;
 
+pub fn batch_limits(state: &GameState) -> (u8, u8) {
+    if state.single_colors().is_some() {
+        (AUTOMATIC_BATCHES, MAX_BATCHES)
+    } else {
+        (32, 128)
+    }
+}
+
 #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum TaskStatus {
     Complete,
@@ -39,6 +47,7 @@ pub struct EvaluationTaskResult {
 // A single worker owns both caches; packed bounds never cross inventory/color spaces.
 thread_local! {
     static KNOWN: RefCell<EvaluationMap> = RefCell::new(super::evaluation::precomputed());
+    static GENERAL: RefCell<Option<search::general::Search>> = const { RefCell::new(None) };
     static SEARCH: RefCell<Option<Search>> = const { RefCell::new(None) };
 }
 
@@ -164,11 +173,21 @@ fn evaluate(
 }
 
 fn status_after_batch(complete: bool, batch: u8, at_capacity: bool) -> TaskStatus {
-    let batch = batch.min(MAX_BATCHES - 1);
+    status_with_limits(complete, batch, at_capacity, AUTOMATIC_BATCHES, MAX_BATCHES)
+}
+
+fn status_with_limits(
+    complete: bool,
+    batch: u8,
+    at_capacity: bool,
+    automatic: u8,
+    maximum: u8,
+) -> TaskStatus {
+    let batch = batch.min(maximum - 1);
     if complete {
         return TaskStatus::Complete;
     }
-    if !at_capacity && (batch + 1) % AUTOMATIC_BATCHES != 0 && batch + 1 < MAX_BATCHES {
+    if !at_capacity && (batch + 1) % automatic != 0 && batch + 1 < maximum {
         TaskStatus::Continuing
     } else {
         TaskStatus::Paused {
@@ -178,13 +197,65 @@ fn status_after_batch(complete: bool, batch: u8, at_capacity: bool) -> TaskStatu
                 "Search paused after its work budget. Unsolved moves remain unknown."
             }
             .into(),
-            can_resume: (batch / AUTOMATIC_BATCHES + 1) * AUTOMATIC_BATCHES < MAX_BATCHES,
+            can_resume: (batch / automatic + 1) * automatic < maximum,
         }
     }
 }
 
+fn evaluate_general(
+    state: &GameState,
+    retained: &mut Option<search::general::Search>,
+    batch: u8,
+) -> Result<(EvaluationMap, TaskStatus), String> {
+    if retained.as_ref().is_none_or(|s| !s.matches(state)) {
+        *retained = Some(search::general::Search::new(state)?);
+    }
+    let (automatic, maximum) = batch_limits(state);
+    let batch = batch.min(maximum - 1);
+    let allowance = 1 + usize::from(batch / automatic);
+    let result = retained.as_mut().unwrap().run(
+        state,
+        search::general::Budget {
+            max_steps: 4000,
+            max_records: 25_000 * allowance,
+            max_bytes: 16 * 1024 * 1024 * allowance,
+            max_horizon: 4 + 2 * allowance as u16,
+        },
+    )?;
+    let mut status = status_with_limits(
+        result.complete,
+        batch,
+        result.at_capacity,
+        automatic,
+        maximum,
+    );
+    if !result.complete && result.exhausted {
+        status = TaskStatus::Paused {
+            reason: "Search paused at the depth limit. Unsolved moves remain unknown.".into(),
+            can_resume: (batch / automatic + 1) * automatic < maximum,
+        };
+    }
+    Ok((result.values, status))
+}
+
 #[oneshot]
 pub async fn EvaluationTask(spec: EvaluationTaskSpec) -> EvaluationTaskResult {
+    if spec.state.single_colors().is_none() {
+        let result = GENERAL
+            .with(|retained| evaluate_general(&spec.state, &mut retained.borrow_mut(), spec.batch));
+        return match result {
+            Ok((values, status)) => EvaluationTaskResult {
+                request_id: spec.request_id,
+                values,
+                status,
+            },
+            Err(error) => EvaluationTaskResult {
+                request_id: spec.request_id,
+                values: EvaluationMap::new(),
+                status: TaskStatus::Failed(error),
+            },
+        };
+    }
     let (result, at_capacity) = KNOWN.with(|known| {
         SEARCH.with(|search| {
             let mut known = known.borrow_mut();
@@ -219,6 +290,56 @@ pub async fn EvaluationTask(spec: EvaluationTaskSpec) -> EvaluationTaskResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn general_worker_returns_material_draws_tactics_and_matching_namespaces() {
+        let mut state = GameState::multicolor();
+        state.remaining_cubies = [2; 6];
+        let mut retained = None;
+        let (values, status) = evaluate_general(&state, &mut retained, 0).unwrap();
+        assert_eq!(status, TaskStatus::Complete);
+        assert!(values.values().all(|v| *v == Evaluation::Draw));
+        state.remaining_cubies = [1, 0, 0, 0, 0, 0];
+        for x in 0..2 {
+            state
+                .cage
+                .drop(crate::core::cubie::Cubie::White, (x, 0))
+                .unwrap();
+        }
+        let mut found = EvaluationMap::new();
+        for batch in 0..batch_limits(&state).0 {
+            let (values, status) = evaluate_general(&state, &mut retained, batch).unwrap();
+            found.extend(values);
+            if status == TaskStatus::Complete {
+                break;
+            }
+        }
+        assert_eq!(
+            found.get(&state.position_key()),
+            Some(&Evaluation::Win {
+                winner: 0,
+                plies: 1
+            })
+        );
+        let search = retained.as_ref().unwrap();
+        assert!(search.matches(&state));
+        search.proof.verify().unwrap();
+        // Swapping owners changes the namespace even with identical stocks.
+        state
+            .color_owners
+            .iter_mut()
+            .flatten()
+            .for_each(|owner| *owner ^= 1);
+        evaluate_general(&state, &mut retained, 0).unwrap();
+        assert!(retained.as_ref().unwrap().matches(&state));
+        for batch in [0, 31, 32, 127] {
+            let status = status_with_limits(false, batch, false, 32, 128);
+            assert_eq!(
+                matches!(status, TaskStatus::Continuing),
+                batch == 0 || batch == 32
+            );
+        }
+    }
+
     #[test]
     fn worker_publishes_exact_partial_results_and_reuses_only_matching_spaces() {
         let root = GameState::new(12, 12);

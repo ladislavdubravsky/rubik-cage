@@ -29,18 +29,7 @@ pub fn game_control(props: &GameControlProps) -> Html {
     let game_state_handle = props.game_state.clone();
     let history_handle = props.history.clone();
     let restart = Callback::from(move |_| {
-        let mut initial = *game_state_handle;
-        for column in initial.cage.grid.iter().flatten() {
-            for color in column.iter().flatten() {
-                if let Some(id) = initial.players.iter().position(|p| p.color == *color) {
-                    initial.remaining_cubies[id] += 1;
-                }
-            }
-        }
-        initial.cage = crate::core::cage::Cage::new();
-        initial.player_to_move = initial.players[0];
-        initial.last_move = None;
-        initial.zobrist_hash = 0;
+        let initial = game_state_handle.restarted();
         game_state_handle.set(initial);
         history_handle.set(Vec::new());
     });

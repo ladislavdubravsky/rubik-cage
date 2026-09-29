@@ -15,6 +15,15 @@ pub enum Cubie {
 }
 
 impl Cubie {
+    pub const ALL: [Self; 6] = [
+        Self::White,
+        Self::Yellow,
+        Self::Red,
+        Self::Orange,
+        Self::Blue,
+        Self::Green,
+    ];
+
     pub fn from_char(c: char) -> Result<Self, String> {
         match c {
             'R' => Ok(Cubie::Red),

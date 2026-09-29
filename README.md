@@ -12,15 +12,15 @@ In this project we solve the puzzle for some classes of initial conditions and c
 
 ## Exact rules
 
-For now we only consider two players, and each has cubies of one color only. If the players start with `m`, resp. `n` cubies, we call this a `(m, n)` game. Players take turns and on each turn the player has three available moves:
+There are two players. The default game gives each player one color; if they start with `m`, resp. `n` cubies, we call this a `(m, n)` game. The **Three colors each** preset gives each player three distinct colors, with three cubies of each color. A winning line must contain three cubies of **one exact color** owned by that player; mixed colors do not win. Players take turns and on each turn the player has three available moves:
 
-- drop a cubie of their color into one of the columns
+- drop a cubie of any owned color that still has reserve pieces into one of the columns
 - rotate one of the layers 90 degrees clockwise or counter-clockwise
 - flip the cage upside down
 
 A player cannot undo the opponent's immediate previous move. Empty-layer rotations and other moves that leave the board unchanged are still legal and update this restriction. In this implementation, a move producing lines for both players is a draw; indefinite play is also evaluated as a draw.
 
-Exact evaluation combines retrograde analysis of complete game graphs with finite-horizon minimax for larger games. Both include the previous-move restriction. Under the corrected rules, `(12,12)` is a **P1 win in 11 plies**, `(3,1)` is a P1 win in 9, and `(3,2)` is drawn. A ply is one player's move. The new `(12,12)` result has an independently checked proof; earlier claims from the unsound solver are superseded. This does not mean every reachable position has been evaluated.
+For one-color-per-player games, exact evaluation combines retrograde analysis of complete game graphs with finite-horizon minimax for larger games. Both include the previous-move restriction. Under the corrected rules, `(12,12)` is a **P1 win in 11 plies**, `(3,1)` is a P1 win in 9, and `(3,2)` is drawn. A ply is one player's move. The new `(12,12)` result has an independently checked proof; earlier claims from the unsound solver are superseded. This does not mean every reachable position has been evaluated.
 
 ## Webapp build
 
@@ -47,13 +47,17 @@ The workflow builds with pinned Trunk and locked dependencies, publishes `dist` 
 
 Click **Game settings** beneath the board to choose 0–12 starting cubies independently for each player. **Start new game** clears the board and undo history, gives P1 the first turn, and closes the panel. **Cancel** leaves the game unchanged; restarting preserves the chosen sizes.
 
-Custom sizes are evaluated on demand by the shared background worker, including checks for proved draws. Results are reused in memory under complete state keys, including safe player-swap equivalents; no additional precomputed files are needed. Search continues automatically in bounded batches. If it reaches a limit, the UI says it is paused and offers **Continue search** when more resources are available. Larger positions can still remain Unknown at the final cap. The standard `(12,12)` opening keeps its bundled exact evaluations.
+Choose **Three colors each · three cubies per color** in Game settings for multi-color play. P1 owns White, Blue and Green; P2 owns Yellow, Red and Orange. Starting counts can be adjusted separately for each color (0–12 each, at most 24 cubies per player). Select a color in the active player's panel, then click a column; keyboard users can focus a column and press Enter or Space. Move rows also identify the color and can be played directly. Exhausted colors are disabled; rotations and flips remain available when reserves run out.
+
+Multi-color games now evaluate in the background using a separate, color-aware exact solver. It can prove short wins and losses, per-color material draws, and complete tiny games. Difficult positions—including the full three-colors-each opening—can remain **Unknown**. **Pause search** and **Continue search** control bounded background work; playing, undo, restart, export and import remain available. The existing two-color solver and bundled opening values are preserved. See [general search, proof rules and resource limits](docs/general-search.md) and [native/WASM optimization measurements](docs/search-performance.md).
+
+Custom single-color sizes are evaluated on demand by the shared background worker, including checks for proved draws. Results are reused in memory under complete state keys, including safe player-swap equivalents; no additional precomputed files are needed. Search continues automatically in bounded batches. If it reaches a limit, the UI says it is paused and offers **Continue search** when more resources are available. Larger positions can still remain Unknown at the final cap. The standard `(12,12)` opening keeps its bundled exact evaluations.
 
 ### Precomputing evaluations
 
 [eval-v1.bin](./assets/eval-v1.bin) contains **122,727 exact `(12,12)` evaluations**, with an independently checkable [proof](./assets/eval-v1.proof.bin). This is a subset: it includes every initial move, the opening winning strategy, and many alternatives; missing entries remain unknown. The browser also loads a complete `(3,1)` table from [eval-3-1.bin](./assets/eval-3-1.bin).
 
-Keys include board, turn, inventories, colors and immediate-undo restriction, canonicalized together. The format records compatibility versions and coverage. The old `assets/eval.bin` is retained only as a rejected legacy regression fixture; the app never loads it.
+Keys include board, turn, inventories, color ownership and immediate-undo restriction, canonicalized together. The format records compatibility versions and coverage. The old `assets/eval.bin` is retained only as a rejected legacy regression fixture; the app never loads it.
 
 Regenerate and certify the full-inventory subset:
 
@@ -84,7 +88,7 @@ The browser starts at `(12,12)` with all 15 opening moves evaluated:
 
 The empty-board Flip and Rotate moves give P2 a win in 11 more plies; their immediate-inverse restrictions are included in the proofs. A single shared worker reuses exact values and finite-horizon bounds, with complete graph analysis available for draws. Swapping players also swaps board ownership, stocks, turn and the winning player; the immediate-inverse restriction is preserved. This closes the `(3,3)` opening’s empty-board cycles, so all 15 initial moves are proved draws. It can publish exact results for some moves while others remain unknown. Exhausting a budget never becomes a draw or an invented distance.
 
-Move-row distances include the selected move: an immediate win displays “Win in 1.” Imported legacy positions are validated and their derived identity is rebuilt; newly exported positions use a versioned format. Restart preserves the imported game's initial inventories and colors.
+Move-row distances include the selected move: an immediate win displays “Win in 1.” Imported legacy positions are validated and their derived identity is rebuilt. Single-color exports retain `RCGPOS01`; multi-color exports use `RCGPOS02` with ownership and reserves per color. Both formats can be imported, and restart preserves the imported game's exact per-color initial inventories and ownership.
 
 ## Playing with core logic
 
@@ -98,3 +102,5 @@ cargo build --release --target wasm32-unknown-unknown --bin app --bin worker
 For the browser regression, serve a Trunk build and run `node scripts/browser_smoke.mjs http://127.0.0.1:8080/rubik-cage/` (Node 22+ and Google Chrome; `CHROME` can select another Chromium binary). This exercises worker reuse, the original move sequence, optimal 11-ply `(12,12)` and 9-ply `(3,1)` games, all opening labels and an edge-drop draw, saved-position import, undo/restart, simultaneous-line termination, custom-size validation and switching during evaluation, the complete `(3,3)` opening, and search continuation.
 
 See [the investigation](docs/search-investigation.md), [redesign plan](docs/search-redesign-plan.md), and [implementation notes](docs/search-implementation.md).
+
+Multi-color work is staged in the [implementation plan](docs/multicolor-plan.md). The [single-color compatibility foundation](docs/single-color-compatibility.md) documents frozen file formats, solver adapters, fixtures and regression checks. Steps 1 and 2 are implemented; generalized nonterminal search remains step 3.

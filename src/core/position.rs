@@ -1,7 +1,6 @@
 //! Exact search identity. Zobrist hashes remain only for legacy position decoding.
 use super::{
     cage::Cage,
-    cubie::Cubie,
     game::{GameState, Player},
     r#move::{Move, Rotation},
 };
@@ -13,8 +12,8 @@ use serde::{Deserialize, Serialize};
 )]
 pub struct PositionKey {
     cage: Cage,
-    colors: [Cubie; 2],
-    remaining: [u8; 2],
+    owners: [Option<u8>; 6],
+    remaining: [u8; 6],
     turn: u8,
     forbidden: Option<Move>,
 }
@@ -31,25 +30,29 @@ impl PositionKey {
     pub(crate) fn unoriented(state: &GameState) -> Self {
         Self {
             cage: state.cage,
-            colors: state.players.map(|p| p.color),
+            owners: state.color_owners,
             remaining: state.remaining_cubies,
             turn: state.player_to_move.id,
             forbidden: state.last_move.and_then(Move::inverse),
         }
     }
 
-    /// Relabel the players while keeping their display colors fixed. Stocks,
-    /// board ownership and turn all swap; the immediate-inverse restriction stays.
-    /// This maps an (m,n) game to (n,m), not two distinct states in the same game.
+    /// Relabel players and their complete rule state. Single-color games retain
+    /// their historical board/stock color swap; multi-color games swap ownership.
+    /// The turn and winning player swap in either case; restrictions stay intact.
     pub fn swapped_players(mut self) -> Self {
-        for color in self.cage.grid.iter_mut().flatten().flatten().flatten() {
-            *color = if *color == self.colors[0] {
-                self.colors[1]
-            } else {
-                self.colors[0]
-            };
+        if let Some([a, b]) = self.to_state().single_colors() {
+            // Preserve the original two-color equivalence and bundled cache reuse.
+            for color in self.cage.grid.iter_mut().flatten().flatten().flatten() {
+                *color = if *color == a { b } else { a };
+            }
+            self.remaining.swap(a as usize, b as usize);
+        } else {
+            // General player relabeling keeps exact color labels and stocks intact.
+            for owner in self.owners.iter_mut().flatten() {
+                *owner ^= 1;
+            }
         }
-        self.remaining.swap(0, 1);
         self.turn ^= 1;
         (0..8)
             .map(|symmetry| self.transformed(symmetry))
@@ -63,19 +66,11 @@ impl PositionKey {
 
     /// The rule state in canonical orientation. Irrelevant drop history is discarded.
     pub fn to_state(&self) -> GameState {
-        let players = [
-            Player {
-                id: 0,
-                color: self.colors[0],
-            },
-            Player {
-                id: 1,
-                color: self.colors[1],
-            },
-        ];
+        let players = [Player { id: 0 }, Player { id: 1 }];
         let mut state = GameState {
             cage: self.cage,
             players,
+            color_owners: self.owners,
             remaining_cubies: self.remaining,
             player_to_move: players[self.turn as usize],
             zobrist_hash: 0,
@@ -129,6 +124,7 @@ impl PositionKey {
 mod tests {
     use super::super::{game::Outcome, r#move::Layer};
     use super::*;
+    use crate::core::cubie::Cubie;
     use std::collections::{HashSet, VecDeque};
 
     fn successors(state: GameState) -> HashSet<PositionKey> {
@@ -186,9 +182,7 @@ mod tests {
         assert_eq!(flip.zobrist_hash, rotation.zobrist_hash); // old identity aliases
         assert_ne!(flip.position_key(), rotation.position_key());
         assert_ne!(flip.position_key(), initial.position_key());
-        let mut colors = initial;
-        colors.players[0].color = Cubie::Yellow;
-        colors.player_to_move = colors.players[0];
+        let colors = GameState::single_color([Cubie::Yellow, Cubie::Red], [3, 1]).unwrap();
         assert_ne!(colors.position_key(), initial.position_key());
     }
 
@@ -266,6 +260,27 @@ mod tests {
         let terminal = state;
         assert!(state.apply_move(Move::Flip).is_err());
         assert_eq!(state, terminal);
+    }
+
+    #[test]
+    fn multicolor_spatial_symmetries_preserve_transitions_and_outcomes() {
+        let mut state = GameState::multicolor();
+        for ply in 0..24 {
+            let expected = successors(state);
+            for symmetry in 0..8 {
+                let transformed = PositionKey::unoriented(&state)
+                    .transformed(symmetry)
+                    .to_state();
+                assert_eq!(state.position_key(), transformed.position_key());
+                assert_eq!(state.outcome(), transformed.outcome());
+                assert_eq!(expected, successors(transformed));
+            }
+            let moves = state.legal_moves();
+            if moves.is_empty() {
+                break;
+            }
+            state.apply_move(moves[(ply * 7) % moves.len()]).unwrap();
+        }
     }
 
     #[test]

@@ -1,0 +1,8 @@
+<!doctype html><title>General search audit</title>
+<script type="module">
+import init from './audit_general.js';
+try {
+  const wasm = await init();
+  if (!globalThis.auditResult && wasm.main) wasm.main();
+} catch (error) { globalThis.auditError = String(error); }
+</script>

@@ -1,4 +1,5 @@
 pub mod app;
+mod compat;
 pub mod core;
 pub mod search;
 
@@ -34,6 +35,7 @@ pub fn app() -> Html {
         GameState::new(12, 12)
     });
     let history = use_state(|| Vec::new());
+    let selected_colors = use_state(|| [None::<crate::core::cubie::Cubie>; 2]);
 
     // Save game state to LocalStorage on any change
     {
@@ -60,17 +62,19 @@ pub fn app() -> Html {
             </p>
             <OneshotProvider<EvaluationTask> path="/rubik-cage/worker.js">
                 <EvaluationProvider state={game_state.clone()}>
-                <HoveredMoveProvider>
+                <HoveredMoveProvider state={*game_state}>
                     <div class="game-area">
                         <PlayerPanel
                             game_state={game_state.clone()}
                             player={game_state.players[0]}
+                            selected_colors={selected_colors.clone()}
                             history={history.clone()}
                         />
-                        <Cage game_state={game_state.clone()} history={history.clone()} />
+                        <Cage game_state={game_state.clone()} history={history.clone()} selected_colors={selected_colors.clone()} />
                         <PlayerPanel
                             game_state={game_state.clone()}
                             player={game_state.players[1]}
+                            selected_colors={selected_colors.clone()}
                             history={history.clone()}
                         />
                     </div>

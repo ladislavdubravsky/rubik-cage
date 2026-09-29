@@ -61,7 +61,11 @@ pub fn slot_to_css(cubie: Option<Cubie>) -> &'static str {
     match cubie {
         Some(Cubie::Blue) => "var(--cubie-blue)",
         Some(Cubie::Red) => "var(--cubie-red)",
-        _ => "var(--slot-empty)",
+        Some(Cubie::White) => "var(--cubie-white)",
+        Some(Cubie::Yellow) => "var(--cubie-yellow)",
+        Some(Cubie::Orange) => "var(--cubie-orange)",
+        Some(Cubie::Green) => "var(--cubie-green)",
+        None => "var(--slot-empty)",
     }
 }
 
@@ -82,4 +86,21 @@ pub fn hex_to_bytes(hex: &str) -> Option<Vec<u8>> {
             .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok())
             .collect::<Option<Vec<u8>>>()?,
     )
+}
+
+/// UI selection is not part of the game/search identity. Repair it on every render.
+pub fn selected_color(state: &GameState, player: u8, preferred: Option<Cubie>) -> Option<Cubie> {
+    preferred
+        .filter(|&c| state.owner(c) == Some(player) && state.remaining(c) > 0)
+        .or_else(|| state.colors_for(player).find(|&c| state.remaining(c) > 0))
+}
+
+pub fn move_label(state: &GameState, m: Move) -> String {
+    match m {
+        Move::Drop {
+            color,
+            column: (x, y),
+        } if state.single_colors().is_none() => format!("Drop {color} at {x},{y}"),
+        _ => m.to_string(),
+    }
 }

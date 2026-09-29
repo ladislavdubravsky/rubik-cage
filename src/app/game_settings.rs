@@ -1,5 +1,5 @@
-use crate::{core::game::GameState, search::packed::Space};
-use web_sys::HtmlInputElement;
+use crate::core::{cubie::Cubie, game::GameState};
+use web_sys::{HtmlInputElement, HtmlSelectElement};
 use yew::prelude::*;
 
 #[derive(Properties, PartialEq)]
@@ -11,35 +11,61 @@ pub struct GameSettingsProps {
 #[function_component(GameSettings)]
 pub fn game_settings(props: &GameSettingsProps) -> Html {
     let open = use_state(|| false);
-    let draft = use_state(|| ["12".to_owned(), "12".to_owned()]);
+    let draft = use_state(|| GameState::new(12, 12));
+    let stocks = use_state(|| {
+        GameState::new(12, 12)
+            .remaining_cubies
+            .map(|n| n.to_string())
+    });
     let toggle = {
         let open = open.clone();
         let draft = draft.clone();
+        let stocks = stocks.clone();
         let state = *props.game_state;
         Callback::from(move |_| {
             if !*open {
-                // Show starting stocks, including pieces already on the board.
-                let totals = Space::new(&state).expect("Validated game state").totals;
-                draft.set(totals.map(|n| n.min(12).to_string()));
+                let initial = state.restarted();
+                stocks.set(initial.remaining_cubies.map(|n| n.to_string()));
+                draft.set(initial);
             }
             open.set(!*open);
         })
     };
-    let sizes = draft[0]
-        .parse::<u8>()
-        .ok()
-        .zip(draft[1].parse::<u8>().ok())
-        .filter(|&(m, n)| m <= 12 && n <= 12);
+    let preset = {
+        let draft = draft.clone();
+        let stocks = stocks.clone();
+        Callback::from(move |event: Event| {
+            let input: HtmlSelectElement = event.target_unchecked_into();
+            let initial = if input.value() == "multi" {
+                GameState::multicolor()
+            } else {
+                GameState::new(12, 12)
+            };
+            stocks.set(initial.remaining_cubies.map(|n| n.to_string()));
+            draft.set(initial);
+        })
+    };
+    let multi = draft.single_colors().is_none();
+    let candidate = (|| {
+        let mut remaining = [0; 6];
+        for c in Cubie::ALL {
+            if draft.owner(c).is_some() {
+                let n = stocks[c as usize].parse::<u8>().ok()?;
+                if n > 12 {
+                    return None;
+                }
+                remaining[c as usize] = n;
+            }
+        }
+        GameState::with_colors(draft.color_owners, remaining).ok()
+    })();
     let start = {
         let open = open.clone();
         let game_state = props.game_state.clone();
         let history = props.history.clone();
         Callback::from(move |event: SubmitEvent| {
             event.prevent_default();
-            if let Some((m, n)) = sizes {
-                let mut initial = GameState::new(m, n);
-                initial.players = game_state.players;
-                initial.player_to_move = initial.players[0];
+            if let Some(initial) = candidate {
                 game_state.set(initial);
                 history.set(Vec::new());
                 open.set(false);
@@ -59,40 +85,41 @@ pub fn game_settings(props: &GameSettingsProps) -> Html {
             }
         })
     };
-
     html! {
         <div class="game-settings">
-            <button type="button" class="settings-toggle" onclick={toggle}
-                aria-expanded={open.to_string()} aria-controls="game-settings-panel">
-                { "Game settings" }
-            </button>
+            <button type="button" class="settings-toggle" onclick={toggle} aria-expanded={open.to_string()} aria-controls="game-settings-panel">{"Game settings"}</button>
             if *open {
                 <form id="game-settings-panel" class="settings-panel" onsubmit={start} onkeydown={escape}>
-                    <p>{ "Starting cubies (0–12 each)" }</p>
+                    <label>{"Game preset"}
+                        <select name="game-preset" onchange={preset}>
+                            <option value="single" selected={!multi}>{"One color per player"}</option>
+                            <option value="multi" selected={multi}>{"Three colors each · three cubies per color"}</option>
+                        </select>
+                    </label>
+                    <p>{if multi { "Starting cubies per color (0–12); at most 24 per player." } else { "Starting cubies (0–12 each)" }}</p>
+                    if multi { <p>{"Win with three of one color in a line. Mixed colors do not win."}</p> }
                     <div class="settings-fields">
-                        { for (0..2).map(|id| {
-                            let oninput = {
-                                let draft = draft.clone();
-                                Callback::from(move |event: InputEvent| {
-                                    let input: HtmlInputElement = event.target_unchecked_into();
-                                    let mut next = (*draft).clone();
-                                    next[id] = input.value();
-                                    draft.set(next);
-                                })
-                            };
-                            html! {
-                                <label>
-                                    { format!("Player {}", id + 1) }
-                                    <input type="number" name={format!("p{}-cubies", id + 1)}
-                                        min="0" max="12" step="1" required=true
-                                        value={draft[id].clone()} {oninput} />
-                                </label>
-                            }
-                        }) }
+                        {for (0..2u8).map(|id| html! {
+                            <fieldset>
+                                <legend>{format!("Player {}", id + 1)}</legend>
+                                {for draft.colors_for(id).map(|color| {
+                                    let oninput = { let stocks = stocks.clone(); Callback::from(move |event: InputEvent| {
+                                        let input: HtmlInputElement = event.target_unchecked_into();
+                                        let mut next = (*stocks).clone(); next[color as usize] = input.value(); stocks.set(next);
+                                    }) };
+                                    html! { <label>
+                                        {color.to_string()}
+                                        <input type="number" name={if multi { format!("p{}-{}-cubies", id + 1, color) } else { format!("p{}-cubies", id + 1) }}
+                                            min="0" max="12" step="1" required=true value={stocks[color as usize].clone()} {oninput} />
+                                    </label> }
+                                })}
+                            </fieldset>
+                        })}
                     </div>
+                    if candidate.is_none() { <p role="alert">{"Enter whole counts from 0 to 12, with at most 24 cubies per player."}</p> }
                     <div class="settings-actions">
-                        <button type="submit" class="control-button" disabled={sizes.is_none()}>{ "Start new game" }</button>
-                        <button type="button" class="settings-toggle" onclick={cancel}>{ "Cancel" }</button>
+                        <button type="submit" class="control-button" disabled={candidate.is_none()}>{"Start new game"}</button>
+                        <button type="button" class="settings-toggle" onclick={cancel}>{"Cancel"}</button>
                     </div>
                 </form>
             }

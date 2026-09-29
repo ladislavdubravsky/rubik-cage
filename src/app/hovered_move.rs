@@ -14,11 +14,19 @@ pub fn use_hovered_move() -> (HoveredMove, Callback<Option<Rc<Move>>>) {
 #[derive(Properties, PartialEq)]
 pub struct HoveredMoveProviderProps {
     pub children: Children,
+    pub state: crate::core::game::GameState,
 }
 
 #[function_component(HoveredMoveProvider)]
 pub fn hovered_move_provider(props: &HoveredMoveProviderProps) -> Html {
     let hovered = use_state(|| HoveredMove(None));
+    {
+        let hovered = hovered.clone();
+        use_effect_with(props.state, move |_| {
+            hovered.set(HoveredMove(None));
+            || ()
+        });
+    }
     let set_hovered = {
         let hovered = hovered.clone();
         Callback::from(move |mv: Option<Rc<Move>>| hovered.set(HoveredMove(mv)))
