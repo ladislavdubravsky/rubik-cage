@@ -38,6 +38,13 @@ pub enum AiInteraction {
 #[derive(Clone, PartialEq)]
 pub struct AiContext(pub Callback<AiInteraction>);
 
+/// Player panes reflect who currently owns the controls, independently of requests.
+#[derive(Clone, PartialEq, Default)]
+pub struct AiPlayerContext {
+    pub computer: [bool; 2],
+    pub automatic: bool,
+}
+
 struct Job {
     session: u64,
     board: Board,
@@ -418,7 +425,7 @@ pub fn ai_controls(props: &AiControlsProps) -> Html {
             c.board.state.player_to_move.id + 1
         )
     } else if c.message.is_empty() {
-        "Choose a suggestion or enable computer turns. Manual play is available throughout.".into()
+        "Choose a suggestion or enable computer turns. Pause AI to use a computer player’s pane manually.".into()
     } else {
         c.message.clone()
     };
@@ -442,7 +449,9 @@ pub fn ai_controls(props: &AiControlsProps) -> Html {
         .unwrap_or_default();
     html! {
         <ContextProvider<AiContext> context={AiContext(notice)}>
-            { for props.children.iter() }
+            <ContextProvider<AiPlayerContext> context={AiPlayerContext { computer: c.computer, automatic: c.automatic }}>
+                { for props.children.iter() }
+            </ContextProvider<AiPlayerContext>>
             <section id="ai-controls" class="ai-controls" aria-label="Computer player">
                 <h2>{"Computer player"}</h2>
                 <div class="ai-options">

@@ -70,3 +70,8 @@
 .cubie-icon.Orange { background-color: var(--cubie-orange); border-color: var(--cubie-orange); }
 .cubie-icon.Green { background-color: var(--cubie-green); border-color: var(--cubie-green); }
 .move-list { max-height: 28rem; overflow-y: auto; padding: 4px; }
+
+.player-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+.player-ai-status { color: #66d9ef; font-weight: 700; margin: 0 0 1em; }
+.ai-controlled .player-controls { opacity: 0.55; }
+.ai-controlled .move-list li { cursor: not-allowed; pointer-events: none; }

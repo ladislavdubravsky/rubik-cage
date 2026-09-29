@@ -1,5 +1,6 @@
 use crate::{
     app::{
+        ai::AiPlayerContext,
         evaluation::EvaluationContext,
         hovered_move::use_hovered_move,
         utils::{self, use_apply_move_callback},
@@ -50,9 +51,15 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
     });
     let eval = use_context::<EvaluationContext>().expect("EvaluationProvider");
 
+    let ai = use_context::<AiPlayerContext>().unwrap_or_default();
     let is_won = props.game_state.outcome().is_some();
-    let apply_move =
-        use_apply_move_callback(props.game_state.clone(), props.history.clone(), is_won);
+    let computer = ai.computer[props.player.id as usize];
+    let ai_controlled = computer && ai.automatic && !is_won;
+    let apply_move = use_apply_move_callback(
+        props.game_state.clone(),
+        props.history.clone(),
+        is_won || ai_controlled,
+    );
 
     let selected = utils::selected_color(
         &props.game_state,
@@ -69,6 +76,16 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
     };
     let (hovered_move, set_hovered_move) = use_hovered_move();
 
+    {
+        let set_hovered_move = set_hovered_move.clone();
+        use_effect_with(ai_controlled, move |disabled| {
+            if *disabled {
+                set_hovered_move.emit(None);
+            }
+            || ()
+        });
+    }
+
     // Save move_list_visible to localStorage on change
     {
         let move_list_visible = move_list_visible.clone();
@@ -84,8 +101,19 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
     }
 
     html! {
-        <div class={classes!("player-panel", if is_turn { "active-turn" } else { "" })}>
+        <div class={classes!("player-panel", is_turn.then_some("active-turn"), ai_controlled.then_some("ai-controlled"))}
+            aria-disabled={ai_controlled.to_string()} aria-busy={(ai_controlled && is_turn).to_string()}>
+
             <h2>{ format!("Player {}", props.player.id + 1) }</h2>
+            if computer {
+                <p class="player-ai-status" role="status">
+                    {if is_won { "Computer player · game finished." }
+                    else if ai_controlled && is_turn { "AI thinking…" }
+                    else if ai_controlled { "AI controlled · waiting for turn." }
+                    else { "AI paused · manual play available." }}
+                </p>
+            }
+            <fieldset class="player-controls" disabled={ai_controlled}>
             <p>{ "Remaining cubies:" }</p>
             <div class="color-reserves" role="group" aria-label={format!("Player {} colors", props.player.id + 1)}>
                 { for props.game_state.colors_for(props.player.id).map(|color| {
@@ -107,7 +135,7 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                                 <button type="button" class="color-selector" data-color={color.to_string()}
                                     aria-label={format!("Select {color}, {count} remaining")}
                                     aria-pressed={(selected == Some(color)).to_string()}
-                                    disabled={!is_turn || is_won || count == 0} onclick={select}>
+                                    disabled={!is_turn || is_won || ai_controlled || count == 0} onclick={select}>
                                     <span class={classes!("cubie-icon", color.to_string())} aria-hidden="true" />
                                     {format!("{color}: {count}")}
                                 </button>
@@ -119,7 +147,7 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                     }
                 }) }
             </div>
-            if multicolor && is_turn && !is_won {
+            if multicolor && is_turn && !is_won && !ai_controlled {
                 <p class="selection-status">{selected.map(|c| format!("Place {c}: choose a column.")).unwrap_or_else(|| "No cubies left. Rotate a layer or flip the cage.".into())}</p>
             }
             <label>
@@ -144,18 +172,19 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                                 let mut new_state = (*props.game_state).clone();
                                 new_state.apply_move_normalize(mv.clone()).unwrap();
                                 let label = eval_to_string(eval.get(&new_state), props.game_state.player_to_move.id, eval.unknown_label(props.game_state.position_key()));
-                                let is_hovered = hovered_move.0.as_ref().map_or(false, |h| h.as_ref() == mv);
+                                let is_hovered = !ai_controlled && hovered_move.0.as_ref().map_or(false, |h| h.as_ref() == mv);
                                 let mv = mv.clone();
                                 let highlight_color = match mv { crate::core::r#move::Move::Drop { color, .. } => utils::slot_to_css(Some(color)), _ => highlight_color };
                                 html! {
                                     <li
+                                        aria-disabled={ai_controlled.to_string()}
                                         class={if is_hovered { "move-highlighted" } else { "" }}
                                         style={if is_hovered { format!("--highlight-color: {};", highlight_color) } else { String::new() }}
                                         onclick={apply_move.reform(move |_| mv.clone())}
                                         onmouseenter={ {
                                             let set_hovered_move = set_hovered_move.clone();
                                             let mv = Rc::new(mv.clone());
-                                            move |_| set_hovered_move.emit(Some(mv.clone()))
+                                            move |_| { if !ai_controlled { set_hovered_move.emit(Some(mv.clone())); } }
                                         }}
                                         onmouseleave={ {
                                             let set_hovered_move = set_hovered_move.clone();
@@ -172,6 +201,7 @@ pub fn player_panel(props: &PlayerPanelProps) -> Html {
                     html! {}
                 }
             }
+            </fieldset>
         </div>
     }
 }

@@ -423,6 +423,33 @@ try {
   await delay(500);
   assert.deepEqual(await rows(), opening, 'import cancels pending AI work');
   assert(await js('!document.querySelector("#ai-play") || document.querySelector("#ai-play").disabled'));
+  // Automatic computer panes are visibly identified and cannot accept manual moves.
+  await importPosition(multiPosition('.........', [4,4,4,4,4,4]));
+  await aiSelect('ai-player-1', 'computer');
+  await aiSelect('ai-player-2', 'computer');
+  await js('document.querySelector("#ai-start").click()');
+  await wait('document.querySelector(".active-turn.ai-controlled .player-ai-status")?.textContent === "AI thinking…"', 'AI pane thinking status');
+  const lockedPane = await js(`(() => {
+    const active = document.querySelector('.active-turn');
+    const before = localStorage.getItem('rubik_cage_position');
+    const disabled = [...active.querySelectorAll('button, input')].every(e => e.matches(':disabled'));
+    const waiting = [...document.querySelectorAll('.player-ai-status')].some(e => e.textContent === 'AI controlled · waiting for turn.');
+    const busy = active.getAttribute('aria-busy');
+    active.querySelector('.move-list li').click();
+    active.querySelector('.color-selector').click();
+    document.querySelector('#ai-pause').click();
+    return {before, disabled, waiting, busy};
+  })()`);
+  await delay(100);
+  assert(lockedPane.disabled && lockedPane.waiting);
+  assert.equal(lockedPane.busy, 'true');
+  assert.equal(await js("localStorage.getItem('rubik_cage_position')"), lockedPane.before, 'disabled move rows cannot override the AI');
+  assert.equal(await js('document.querySelectorAll(".ai-controlled").length'), 0);
+  assert(await js('[...document.querySelectorAll(".player-ai-status")].every(e => e.textContent === "AI paused · manual play available.")'));
+  assert(await js('!document.querySelector(".active-turn input").matches(":disabled")'), 'pausing restores player controls');
+  await aiSelect('ai-player-1', 'human');
+  await aiSelect('ai-player-2', 'human');
+
   // Explicit cancellation also works when restarting an identical opening.
   await importPosition(multiPosition('.........', [4,4,4,4,4,4]));
   await js('document.querySelector("#ai-suggest").click()');
@@ -434,7 +461,7 @@ try {
   assert.equal(workers.size, 1, 'AI and exact evaluation share one reusable worker');
 
   assert.deepEqual(exceptions, [], 'browser runtime exceptions');
-  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw, custom settings, complete 3,3 opening, player-swap reuse, automatic and explicit continuation, inventory switching, multi-color selection/stocks/keyboard/previews/export/import/wins/general-search/material-draw/pause/resume/Unknown/switching/full-board-four-each/AI-advice/AI-turns/AI-self-play/AI-pause/AI-cancellation');
+  console.log('PASS: all 15 opening evaluations, certified edge-drop draw, verified 11-ply full-inventory game, one reusable worker, legacy import, cached replay, exact 9-ply line, fresh solve, undo/restart, simultaneous draw, custom settings, complete 3,3 opening, player-swap reuse, automatic and explicit continuation, inventory switching, multi-color selection/stocks/keyboard/previews/export/import/wins/general-search/material-draw/pause/resume/Unknown/switching/full-board-four-each/AI-advice/AI-turns/AI-self-play/AI-pause/AI-pane-lock/AI-cancellation');
 } finally {
   ws?.close();
   const exited = chrome.exitCode !== null ? Promise.resolve() : new Promise(resolve => chrome.once('exit', resolve));
